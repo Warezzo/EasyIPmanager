@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { api } from "../lib/api";
 import { Icon, Modal, FormField, Button, Badge, PageHeader, EmptyState, inputStyle, Toast, ConfirmModal } from "../components/UI";
 
-const TYPE_COLORS = { A: "#3b82f6", AAAA: "#6366f1", CNAME: "#8b5cf6", MX: "#f59e0b", TXT: "#10b981", PTR: "#06b6d4", NS: "#f97316", SRV: "#ec4899", CAA: "var(--text-muted)" };
+const TYPE_COLORS = { A: "#0ea5e9", AAAA: "#6366f1", CNAME: "#8b5cf6", MX: "#f59e0b", TXT: "#10b981", PTR: "#06b6d4", NS: "#f97316", SRV: "#ec4899", CAA: "var(--text-muted)" };
 const DNS_TYPES = ["A", "AAAA", "CNAME", "MX", "TXT", "PTR", "NS", "SRV", "CAA"];
 
 const emptyForm = { zone: "", name: "", type: "A", value: "", ttl: 3600, priority: "", description: "" };

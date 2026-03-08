@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import { Icon, Modal, FormField, Button, Badge, PageHeader, EmptyState, inputStyle, Toast } from "../components/UI";
 import { formatDate } from "../lib/utils";
 
-const STATUS_COLORS = { pending: "var(--text-muted)", running: "#3b82f6", done: "#22c55e", error: "#ef4444", aborted: "#f97316" };
+const STATUS_COLORS = { pending: "var(--text-muted)", running: "#10b981", done: "#22c55e", error: "#ef4444", aborted: "#f97316" };
 const SCAN_TYPES = [
   { value: "ping", label: "Ping Sweep", desc: "Solo host discovery, veloce" },
   { value: "ports", label: "Port Scan", desc: "Discovery + top 100 porte" },

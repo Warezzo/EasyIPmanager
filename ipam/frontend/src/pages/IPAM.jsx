@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import { cidrToInfo, ipToInt, isIPInSubnet, generateIPRange } from "../lib/utils";
 import { Icon, Modal, FormField, Button, Badge, SaturationBar, PageHeader, EmptyState, inputStyle, Toast, ConfirmModal } from "../components/UI";
 
-const TYPE_COLORS = { server: "#3b82f6", router: "#8b5cf6", switch: "#06b6d4", workstation: "#22c55e", printer: "#f97316", camera: "#ec4899", iot: "#eab308", other: "var(--text-muted)" };
+const TYPE_COLORS = { server: "#6366f1", router: "#8b5cf6", switch: "#06b6d4", workstation: "#22c55e", printer: "#f97316", camera: "#ec4899", iot: "#eab308", other: "var(--text-muted)" };
 
 function IPGrid({ cidr, usedIPs }) {
   const all = generateIPRange(cidr);

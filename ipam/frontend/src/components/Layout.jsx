@@ -44,12 +44,12 @@ export default function Layout({ children }) {
         {/* Logo */}
         <div style={{ padding: "20px 16px 16px", borderBottom: "1px solid var(--border-subtle)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 30, height: 30, background: "linear-gradient(135deg, #3b82f6, #8b5cf6)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <div style={{ width: 30, height: 30, background: "linear-gradient(135deg, #10b981, #06b6d4)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <Icon d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 0 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 0-2-2V9m0 0h18" size={14} />
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>IPAM</div>
-              <div style={{ fontSize: 9, color: "var(--text-ghost)", letterSpacing: "0.08em" }}>LAB MANAGER</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>EasyIPmanager</div>
+              <div style={{ fontSize: 9, color: "var(--text-ghost)", letterSpacing: "0.08em" }}>NETWORK MANAGER</div>
             </div>
           </div>
         </div>

@@ -20,7 +20,12 @@ async function request(method, path, body) {
     return;
   }
   if (res.status === 204) return null;
-  const data = await res.json();
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error(`HTTP ${res.status}: risposta non valida dal server`);
+  }
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
 }

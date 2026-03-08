@@ -8,6 +8,12 @@ router.use(requireAuth);
 
 const VALID_TYPES = ["A", "AAAA", "CNAME", "MX", "TXT", "PTR", "NS", "SRV", "CAA"];
 
+// TTL must be between 60 s and ~68 years (max SQLite INTEGER); default 3600
+function safeTTL(value, fallback = 3600) {
+  const n = parseInt(value, 10);
+  return !isNaN(n) && n >= 60 && n <= 2147483647 ? n : fallback;
+}
+
 // GET /api/dns?zone=example.local
 router.get("/", (req, res) => {
   const db = getDb();
@@ -33,7 +39,7 @@ router.post("/", (req, res) => {
   const db = getDb();
   const id = randomUUID();
   db.prepare(`INSERT INTO dns_records (id,zone,name,type,value,ttl,priority,ip_entry_id,description) VALUES (?,?,?,?,?,?,?,?,?)`)
-    .run(id, zone.toLowerCase(), name.toLowerCase(), type.toUpperCase(), value, ttl || 3600, priority || null, ip_entry_id || null, description || null);
+    .run(id, zone.toLowerCase(), name.toLowerCase(), type.toUpperCase(), value, safeTTL(ttl), priority || null, ip_entry_id || null, description || null);
   res.status(201).json(db.prepare("SELECT * FROM dns_records WHERE id=?").get(id));
 });
 
@@ -49,7 +55,7 @@ router.put("/:id", (req, res) => {
       (name || existing.name).toLowerCase(),
       (type || existing.type).toUpperCase(),
       value ?? existing.value,
-      ttl ?? existing.ttl,
+      ttl !== undefined ? safeTTL(ttl, existing.ttl) : existing.ttl,
       priority ?? existing.priority,
       ip_entry_id ?? existing.ip_entry_id,
       description ?? existing.description,

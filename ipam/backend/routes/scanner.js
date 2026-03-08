@@ -3,6 +3,15 @@ const { randomUUID } = require("crypto");
 const { spawn } = require("child_process");
 const { getDb } = require("../db");
 const { requireAuth } = require("../middleware/auth");
+const rateLimit = require("express-rate-limit");
+
+const scanStartLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { error: "Too many scan requests — max 10 per minute" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const router = express.Router();
 router.use(requireAuth);
@@ -31,7 +40,7 @@ router.get("/:id", (req, res) => {
 });
 
 // POST /api/scanner/start - kick off a scan
-router.post("/start", (req, res) => {
+router.post("/start", scanStartLimiter, (req, res) => {
   const { subnet_id, target, scan_type = "ping" } = req.body;
 
   if (!target) return res.status(400).json({ error: "target required (CIDR or IP)" });
@@ -62,10 +71,26 @@ router.post("/start", (req, res) => {
 
   activeScans.set(id, { process: proc, killTimer });
 
+  const MAX_BUF = 10 * 1024 * 1024; // 10 MB cap — prevents memory exhaustion on huge scans
   let stdout = "";
   let stderr = "";
-  proc.stdout.on("data", (d) => { stdout += d.toString(); });
-  proc.stderr.on("data", (d) => { stderr += d.toString(); });
+  let bufOverflow = false;
+  proc.stdout.on("data", (d) => {
+    if (stdout.length < MAX_BUF) stdout += d.toString();
+    else bufOverflow = true;
+  });
+  proc.stderr.on("data", (d) => {
+    if (stderr.length < MAX_BUF) stderr += d.toString();
+  });
+
+  proc.on("error", (err) => {
+    clearTimeout(killTimer);
+    activeScans.delete(id);
+    const errMsg = err.code === "ENOENT" ? "nmap not found — install nmap on the server" : err.message;
+    console.error("nmap spawn error:", err);
+    getDb().prepare("UPDATE scan_results SET status='error',finished_at=?,result=? WHERE id=?")
+      .run(new Date().toISOString(), JSON.stringify({ error: errMsg }), id);
+  });
 
   proc.on("close", (code) => {
     const entry = activeScans.get(id);
@@ -76,10 +101,12 @@ router.post("/start", (req, res) => {
     const db2 = getDb();
     try {
       const parsed = parseNmapOutput(stdout);
-      db2.prepare(`UPDATE scan_results SET status=?,finished_at=?,result=? WHERE id=?`)
-        .run(code === 0 ? "done" : "error", new Date().toISOString(), JSON.stringify({ hosts: parsed, raw: stdout, stderr }), id);
+      const result = { hosts: parsed, raw: stdout, stderr };
+      if (bufOverflow) result.warning = "Output truncated at 10 MB — scan too large";
+      db2.prepare("UPDATE scan_results SET status=?,finished_at=?,result=? WHERE id=?")
+        .run(code === 0 ? "done" : "error", new Date().toISOString(), JSON.stringify(result), id);
     } catch (e) {
-      db2.prepare(`UPDATE scan_results SET status='error',finished_at=?,result=? WHERE id=?`)
+      db2.prepare("UPDATE scan_results SET status='error',finished_at=?,result=? WHERE id=?")
         .run(new Date().toISOString(), JSON.stringify({ error: e.message, raw: stdout, stderr }), id);
     }
   });
@@ -184,7 +211,11 @@ function parseNmapOutput(raw) {
 }
 
 function parseScan(scan) {
-  return { ...scan, result: scan.result ? JSON.parse(scan.result) : null };
+  let result = null;
+  if (scan.result) {
+    try { result = JSON.parse(scan.result); } catch { result = { error: "Result parsing failed" }; }
+  }
+  return { ...scan, result };
 }
 
 module.exports = router;

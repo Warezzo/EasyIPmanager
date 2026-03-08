@@ -24,7 +24,7 @@ router.post("/", (req, res) => {
       .run(id, name, cidr, vlan || null, location || null, description || null);
     res.status(201).json(db.prepare("SELECT * FROM subnets WHERE id=?").get(id));
   } catch (e) {
-    if (e.message.includes("UNIQUE")) return res.status(409).json({ error: "CIDR already exists" });
+    if (e.code === "SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({ error: "CIDR already exists" });
     throw e;
   }
 });
@@ -40,7 +40,7 @@ router.put("/:id", (req, res) => {
         location ?? existing.location, description ?? existing.description, req.params.id);
     res.json(db.prepare("SELECT * FROM subnets WHERE id=?").get(req.params.id));
   } catch (e) {
-    if (e.message.includes("UNIQUE")) return res.status(409).json({ error: "CIDR already exists" });
+    if (e.code === "SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({ error: "CIDR already exists" });
     throw e;
   }
 });
@@ -70,7 +70,7 @@ router.post("/:id/entries", (req, res) => {
       .run(id, req.params.id, ip, hostname, mac || null, type || "other", description || null, JSON.stringify(tags || []));
     res.status(201).json(parseEntry(db.prepare("SELECT * FROM ip_entries WHERE id=?").get(id)));
   } catch (e) {
-    if (e.message.includes("UNIQUE")) return res.status(409).json({ error: "IP already assigned in this subnet" });
+    if (e.code === "SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({ error: "IP already assigned in this subnet" });
     throw e;
   }
 });

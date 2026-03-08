@@ -7,14 +7,14 @@ const { requireAuth } = require("../middleware/auth");
 const router = express.Router();
 router.use(requireAuth);
 
-// Active scans map: scanId -> { process, aborted }
+// Active scans map: scanId -> { process, killTimer }
 const activeScans = new Map();
 
 // GET /api/scanner - list recent scans
 router.get("/", (req, res) => {
   const db = getDb();
   const scans = db.prepare(`
-    SELECT sr.*, s.name as subnet_name, s.cidr 
+    SELECT sr.*, s.name as subnet_name, s.cidr
     FROM scan_results sr
     LEFT JOIN subnets s ON s.id = sr.subnet_id
     ORDER BY sr.created_at DESC LIMIT 50
@@ -33,12 +33,16 @@ router.get("/:id", (req, res) => {
 // POST /api/scanner/start - kick off a scan
 router.post("/start", (req, res) => {
   const { subnet_id, target, scan_type = "ping" } = req.body;
-  // target can be a CIDR, single IP, or range
+
   if (!target) return res.status(400).json({ error: "target required (CIDR or IP)" });
 
-  // Validate target is a reasonable network string (no shell injection)
-  if (!/^[\d./\-]+$/.test(target)) {
-    return res.status(400).json({ error: "Invalid target format" });
+  // Strict validation: only allow well-formed IPs, CIDRs, or simple ranges
+  if (!isValidTarget(target)) {
+    return res.status(400).json({ error: "Invalid target format. Accepted: single IP (1.2.3.4), CIDR (1.2.3.0/24), range (1.2.3.1-254)" });
+  }
+
+  if (scan_type && !["ping", "ports", "full"].includes(scan_type)) {
+    return res.status(400).json({ error: "Invalid scan_type. Must be ping, ports, or full" });
   }
 
   const db = getDb();
@@ -46,14 +50,17 @@ router.post("/start", (req, res) => {
   db.prepare(`INSERT INTO scan_results (id,subnet_id,target,status,started_at) VALUES (?,?,?,?,?)`)
     .run(id, subnet_id || null, target, "running", new Date().toISOString());
 
-  // Build nmap command based on scan_type
-  // ping: fast host discovery only
-  // ports: ping + common ports
-  // full: OS detection + services (slower)
   const nmapArgs = buildNmapArgs(target, scan_type);
+  const proc = spawn("nmap", nmapArgs);
 
-  const proc = spawn("nmap", nmapArgs, { timeout: 5 * 60 * 1000 });
-  activeScans.set(id, { process: proc, aborted: false });
+  // Hard timeout: kill nmap after 10 minutes regardless
+  const killTimer = setTimeout(() => {
+    if (activeScans.has(id)) {
+      proc.kill("SIGKILL");
+    }
+  }, 10 * 60 * 1000);
+
+  activeScans.set(id, { process: proc, killTimer });
 
   let stdout = "";
   let stderr = "";
@@ -61,7 +68,11 @@ router.post("/start", (req, res) => {
   proc.stderr.on("data", (d) => { stderr += d.toString(); });
 
   proc.on("close", (code) => {
-    activeScans.delete(id);
+    const entry = activeScans.get(id);
+    if (entry) {
+      clearTimeout(entry.killTimer);
+      activeScans.delete(id);
+    }
     const db2 = getDb();
     try {
       const parsed = parseNmapOutput(stdout);
@@ -80,8 +91,9 @@ router.post("/start", (req, res) => {
 router.post("/:id/abort", (req, res) => {
   const entry = activeScans.get(req.params.id);
   if (!entry) return res.status(404).json({ error: "Scan not found or already finished" });
+  clearTimeout(entry.killTimer);
   entry.process.kill("SIGTERM");
-  entry.aborted = true;
+  activeScans.delete(req.params.id);
   const db = getDb();
   db.prepare("UPDATE scan_results SET status='aborted',finished_at=? WHERE id=?")
     .run(new Date().toISOString(), req.params.id);
@@ -110,16 +122,35 @@ router.post("/:id/import", (req, res) => {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Validate that a scan target is a legitimate IP, CIDR, or simple range.
+ * Rejects anything that could be used for command injection.
+ */
+function isValidTarget(target) {
+  const ipRe    = /^(\d{1,3}\.){3}\d{1,3}$/;
+  const cidrRe  = /^(\d{1,3}\.){3}\d{1,3}\/(\d|[12]\d|3[012])$/;
+  const rangeRe = /^(\d{1,3}\.){3}\d{1,3}-\d{1,3}$/;
+
+  if (!ipRe.test(target) && !cidrRe.test(target) && !rangeRe.test(target)) return false;
+
+  // Validate each octet of the base IP is 0-255
+  const baseIP = target.split(/[\/\-]/)[0];
+  return baseIP.split(".").every((o) => {
+    const n = parseInt(o, 10);
+    return !isNaN(n) && n >= 0 && n <= 255;
+  });
+}
+
 function buildNmapArgs(target, scan_type) {
-  const base = ["-oN", "-"]; // output to stdout
+  const base = ["-oN", "-"]; // output to stdout in normal format
   switch (scan_type) {
     case "ports":
-      return ["-sV", "--top-ports", "100", "-T4", target, ...base];
+      return ["-sV", "--top-ports", "100", "-T4", "--host-timeout", "5m", target, ...base];
     case "full":
-      return ["-sV", "-O", "--top-ports", "1000", "-T4", target, ...base];
+      return ["-sV", "-O", "--top-ports", "1000", "-T4", "--host-timeout", "8m", target, ...base];
     case "ping":
     default:
-      return ["-sn", "-T4", target, ...base];
+      return ["-sn", "-T4", "--host-timeout", "2m", target, ...base];
   }
 }
 
@@ -132,18 +163,12 @@ function parseNmapOutput(raw) {
     const reportMatch = line.match(/Nmap scan report for (.+)/);
     if (reportMatch) {
       if (current) hosts.push(current);
-      const full = reportMatch[1];
-      const ipMatch = full.match(/\(?([\d.]+)\)?/);
+      const full = reportMatch[1].trim();
+      const ipMatch = full.match(/\(?([\d.]+)\)?$/);
       const hostnameMatch = full.match(/^([^\s(]+)/);
-      current = {
-        ip: ipMatch ? ipMatch[1] : full,
-        hostname: hostnameMatch && hostnameMatch[1] !== ipMatch?.[1] ? hostnameMatch[1] : null,
-        mac: null,
-        vendor: null,
-        status: "up",
-        ports: [],
-        os: null,
-      };
+      const ip = ipMatch ? ipMatch[1] : full;
+      const hostname = hostnameMatch && hostnameMatch[1] !== ip ? hostnameMatch[1] : null;
+      current = { ip, hostname, mac: null, vendor: null, status: "up", ports: [], os: null };
       continue;
     }
     if (!current) continue;

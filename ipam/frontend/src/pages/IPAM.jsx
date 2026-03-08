@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../lib/api";
 import { cidrToInfo, ipToInt, isIPInSubnet, generateIPRange } from "../lib/utils";
-import { Icon, Modal, FormField, Button, Badge, SaturationBar, PageHeader, EmptyState, inputStyle, Toast } from "../components/UI";
+import { Icon, Modal, FormField, Button, Badge, SaturationBar, PageHeader, EmptyState, inputStyle, Toast, ConfirmModal } from "../components/UI";
 
 const TYPE_COLORS = { server: "#3b82f6", router: "#8b5cf6", switch: "#06b6d4", workstation: "#22c55e", printer: "#f97316", camera: "#ec4899", iot: "#eab308", other: "var(--text-muted)" };
 
@@ -17,7 +17,7 @@ function IPGrid({ cidr, usedIPs }) {
           const entry = usedSet.get(ip);
           return (
             <div key={ip} title={entry ? `${ip} — ${entry.hostname} (${entry.type})` : ip}
-              style={{ width: 14, height: 14, borderRadius: 2, background: entry ? "#3b82f6" : "var(--bg-raised)", border: `1px solid ${entry ? "#3b82f6" : "var(--bg-overlay)"}`, boxShadow: entry ? "0 0 4px #3b82f644" : "none", transition: "all 0.1s" }} />
+              style={{ width: 14, height: 14, borderRadius: 2, background: entry ? "var(--accent)" : "var(--bg-raised)", border: `1px solid ${entry ? "var(--accent)" : "var(--bg-overlay)"}`, boxShadow: entry ? "0 0 4px color-mix(in srgb, var(--accent) 27%, transparent)" : "none", transition: "all 0.1s" }} />
           );
         })}
       </div>
@@ -35,8 +35,8 @@ function SubnetCard({ subnet, used, total, onSelect, onEdit, onDelete }) {
   const statusColor = pct >= 90 ? "#ef4444" : pct >= 70 ? "#f97316" : pct >= 50 ? "#eab308" : "#22c55e";
   return (
     <div onClick={() => onSelect(subnet)} style={{ background: "var(--bg-raised)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 20, cursor: "pointer", transition: "all 0.2s", position: "relative", overflow: "hidden" }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#3b82f6"; e.currentTarget.style.boxShadow = "0 0 20px #3b82f622"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.boxShadow = "none"; }}>
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.boxShadow = "0 0 20px color-mix(in srgb, var(--accent) 13%, transparent)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-default)"; e.currentTarget.style.boxShadow = "none"; }}>
       <div style={{ position: "absolute", top: 0, right: 0, width: 60, height: 60, background: `${statusColor}11`, borderRadius: "0 12px 0 60px" }} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
         <div>
@@ -70,6 +70,7 @@ const COLS = [
   { key: "type",        label: "Tipo",        defaultW: 90  },
   { key: "actions",     label: "Azioni",      defaultW: 72  },
 ];
+const COLS_STORAGE_KEY = "ipam_col_widths";
 
 function ResizableHandle({ colKey, onMouseDown, isDragging }) {
   const [hovered, setHovered] = useState(false);
@@ -86,9 +87,20 @@ function ResizableHandle({ colKey, onMouseDown, isDragging }) {
 }
 
 function ResizableTable({ entries, onEdit, onDelete }) {
-  const [widths, setWidths] = useState(() => Object.fromEntries(COLS.map((c) => [c.key, c.defaultW])));
+  const [widths, setWidths] = useState(() => {
+    const defaults = Object.fromEntries(COLS.map((c) => [c.key, c.defaultW]));
+    try {
+      const saved = localStorage.getItem(COLS_STORAGE_KEY);
+      return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
+    } catch { return defaults; }
+  });
   const dragging = useRef(null);
   const [draggingKey, setDraggingKey] = useState(null);
+
+  // Persist column widths to localStorage on every change
+  useEffect(() => {
+    try { localStorage.setItem(COLS_STORAGE_KEY, JSON.stringify(widths)); } catch {}
+  }, [widths]);
 
   const onMouseDown = (e, key) => {
     e.preventDefault();
@@ -143,7 +155,7 @@ function ResizableTable({ entries, onEdit, onDelete }) {
             onMouseEnter={(ev) => { if (!draggingKey) ev.currentTarget.style.background = "var(--bg-raised)"; }}
             onMouseLeave={(ev) => { if (!draggingKey) ev.currentTarget.style.background = "transparent"; }}>
             <div style={{ padding: "10px 12px", overflow: "hidden" }}>
-              <span style={{ fontFamily: "monospace", fontSize: 13, color: "#60a5fa", whiteSpace: "nowrap" }}>{e.ip}</span>
+              <span style={{ fontFamily: "monospace", fontSize: 13, color: "var(--accent)", whiteSpace: "nowrap" }}>{e.ip}</span>
             </div>
             <div style={{ padding: "10px 12px", overflow: "hidden" }}>
               <div style={{ fontSize: 13, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.hostname}</div>
@@ -169,6 +181,25 @@ function ResizableTable({ entries, onEdit, onDelete }) {
   );
 }
 
+// ── CSV Export ────────────────────────────────────────────────────────────────
+
+function exportCSV(entries, subnet) {
+  const rows = [["IP", "Hostname", "MAC", "Tipo", "Descrizione", "Tags"]];
+  entries.forEach((e) =>
+    rows.push([e.ip, e.hostname, e.mac || "", e.type, e.description || "", (e.tags || []).join(";")])
+  );
+  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${subnet.name.replace(/\s+/g, "_")}_${subnet.cidr.replace(/\//g, "-")}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 const emptySubnet = { name: "", cidr: "", vlan: "", location: "", description: "" };
 const emptyEntry = { ip: "", hostname: "", mac: "", type: "server", description: "", tags: "" };
 
@@ -179,6 +210,7 @@ export default function IPAM() {
   const [selected, setSelected] = useState(null);
   const [detailView, setDetailView] = useState("table");
   const [modal, setModal] = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null); // { title, message, onConfirm, onCancel }
   const [editTarget, setEditTarget] = useState(null);
   const [subnetForm, setSubnetForm] = useState(emptySubnet);
   const [entryForm, setEntryForm] = useState(emptyEntry);
@@ -188,25 +220,30 @@ export default function IPAM() {
 
   const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
+  // Load only subnets on mount — entries are lazy-loaded when a subnet is selected
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const subs = await api.getSubnets();
       setSubnets(subs);
-      // Load entries for all subnets in parallel
-      const allEntries = await Promise.all(subs.map((s) => api.getEntries(s.id).then((e) => [s.id, e])));
-      setEntries(Object.fromEntries(allEntries));
     } catch (e) { showToast(e.message, "error"); }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const loadEntries = async (subnetId) => {
+  const loadEntries = useCallback(async (subnetId) => {
     try {
       const e = await api.getEntries(subnetId);
       setEntries((prev) => ({ ...prev, [subnetId]: e }));
     } catch (e) { showToast(e.message, "error"); }
+  }, []);
+
+  // Lazy-load entries when a subnet is selected (only if not already cached)
+  const handleSelect = (sub) => {
+    if (selected?.id === sub.id) { setSelected(null); return; }
+    setSelected(sub);
+    if (!entries[sub.id]) loadEntries(sub.id);
   };
 
   // ── Subnet CRUD ──
@@ -233,15 +270,22 @@ export default function IPAM() {
     } catch (e) { showToast(e.message, "error"); }
   };
 
-  const deleteSubnet = async (id) => {
-    if (!confirm("Eliminare questa subnet e tutti i suoi IP?")) return;
-    try {
-      await api.deleteSubnet(id);
-      setSubnets((prev) => prev.filter((s) => s.id !== id));
-      setEntries((prev) => { const n = { ...prev }; delete n[id]; return n; });
-      if (selected?.id === id) setSelected(null);
-      showToast("Subnet eliminata", "warning");
-    } catch (e) { showToast(e.message, "error"); }
+  const deleteSubnet = (id) => {
+    setConfirmModal({
+      title: "Elimina Subnet",
+      message: "Eliminare questa subnet e tutti i suoi IP? L'operazione è irreversibile.",
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          await api.deleteSubnet(id);
+          setSubnets((prev) => prev.filter((s) => s.id !== id));
+          setEntries((prev) => { const n = { ...prev }; delete n[id]; return n; });
+          if (selected?.id === id) setSelected(null);
+          showToast("Subnet eliminata", "warning");
+        } catch (e) { showToast(e.message, "error"); }
+      },
+      onCancel: () => setConfirmModal(null),
+    });
   };
 
   // ── Entry CRUD ──
@@ -264,24 +308,37 @@ export default function IPAM() {
     } catch (e) { showToast(e.message, "error"); }
   };
 
-  const deleteEntry = async (id) => {
-    if (!confirm("Rimuovere questo IP?")) return;
-    try {
-      await api.deleteEntry(selected.id, id);
-      await loadEntries(selected.id);
-      showToast("IP rimosso", "warning");
-    } catch (e) { showToast(e.message, "error"); }
+  const deleteEntry = (id) => {
+    setConfirmModal({
+      title: "Rimuovi IP",
+      message: "Rimuovere questo indirizzo IP dalla subnet?",
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          await api.deleteEntry(selected.id, id);
+          await loadEntries(selected.id);
+          showToast("IP rimosso", "warning");
+        } catch (e) { showToast(e.message, "error"); }
+      },
+      onCancel: () => setConfirmModal(null),
+    });
   };
 
   const filteredSubnets = subnets.filter((s) => !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.cidr.includes(search) || (s.vlan && s.vlan.toString().includes(search)));
   const subnetEntries = selected ? (entries[selected.id] || []) : [];
   const info = selected ? cidrToInfo(selected.cidr) : null;
 
+  // Capacity warning (only shown once entries are loaded)
+  const capacityPct = info && info.total > 0 && entries[selected?.id] ? Math.round((subnetEntries.length / info.total) * 100) : 0;
+  const capacityWarning = capacityPct >= 90 ? { color: "#ef4444", msg: `Attenzione: subnet al ${capacityPct}% della capacità!` }
+    : capacityPct >= 80 ? { color: "#f97316", msg: `Avviso: subnet al ${capacityPct}% della capacità` }
+    : null;
+
   return (
     <div style={{ padding: 24, display: "flex", gap: 24 }}>
       {/* Left panel */}
       <div style={{ width: selected ? 360 : "100%", flexShrink: 0, transition: "width 0.3s" }}>
-        <PageHeader title="Subnet" subtitle={`${subnets.length} subnet · ${Object.values(entries).flat().length} IP assegnati`}
+        <PageHeader title="Subnet" subtitle={`${subnets.length} subnet`}
           action={<Button onClick={openAddSubnet}><Icon d="M12 5v14M5 12h14" size={14} /> Nuova Subnet</Button>} />
         <div style={{ position: "relative", marginBottom: 16 }}>
           <div style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-ghost)" }}><Icon d="M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" size={14} /></div>
@@ -295,7 +352,7 @@ export default function IPAM() {
           <div style={{ display: "grid", gridTemplateColumns: selected ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
             {filteredSubnets.map((s) => (
               <SubnetCard key={s.id} subnet={s} used={(entries[s.id] || []).length} total={cidrToInfo(s.cidr)?.total || 0}
-                onSelect={(sub) => setSelected(selected?.id === sub.id ? null : sub)}
+                onSelect={handleSelect}
                 onEdit={openEditSubnet} onDelete={deleteSubnet} />
             ))}
           </div>
@@ -305,12 +362,20 @@ export default function IPAM() {
       {/* Right panel: detail */}
       {selected && info && (
         <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Capacity warning banner */}
+          {capacityWarning && (
+            <div style={{ background: `${capacityWarning.color}15`, border: `1px solid ${capacityWarning.color}44`, borderRadius: 8, padding: "8px 14px", marginBottom: 12, fontSize: 12, color: capacityWarning.color, display: "flex", alignItems: "center", gap: 8 }}>
+              <Icon d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" size={14} />
+              {capacityWarning.msg}
+            </div>
+          )}
+
           <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: "16px 20px", marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
                   <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{selected.cidr}</span>
-                  {selected.vlan && <Badge color="#3b82f6">VLAN {selected.vlan}</Badge>}
+                  {selected.vlan && <Badge color="var(--accent)">VLAN {selected.vlan}</Badge>}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{selected.name}{selected.location ? ` · ${selected.location}` : ""}</div>
               </div>
@@ -319,6 +384,11 @@ export default function IPAM() {
                   <Icon d={detailView === "table" ? "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" : "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"} size={13} />
                   {detailView === "table" ? "Mappa" : "Tabella"}
                 </Button>
+                {subnetEntries.length > 0 && (
+                  <Button variant="ghost" onClick={() => exportCSV(subnetEntries, selected)}>
+                    <Icon d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" size={13} /> CSV
+                  </Button>
+                )}
                 <Button onClick={openAddEntry}><Icon d="M12 5v14M5 12h14" size={14} /> Assegna IP</Button>
                 <Button variant="ghost" onClick={() => setSelected(null)}><Icon d="M18 6L6 18M6 6l12 12" size={14} /></Button>
               </div>
@@ -381,6 +451,16 @@ export default function IPAM() {
             <Button onClick={saveEntry}><Icon d="M20 6L9 17l-5-5" size={14} /> {editTarget ? "Salva" : "Assegna"}</Button>
           </div>
         </Modal>
+      )}
+
+      {/* Confirm modal (replaces browser confirm()) */}
+      {confirmModal && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={confirmModal.onCancel}
+        />
       )}
 
       {toast && <Toast {...toast} />}

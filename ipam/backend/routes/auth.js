@@ -1,5 +1,6 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
 const { signToken, requireAuth } = require("../middleware/auth");
 
@@ -9,28 +10,42 @@ const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: "Too many login attempts, try again in 15 minutes" },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
+
+// Pre-hash admin password once at startup so we never do plain-text comparison
+const ADMIN_USER = process.env.ADMIN_USER || "admin";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+if (!ADMIN_PASSWORD) {
+  console.warn("WARNING: ADMIN_PASSWORD is not set — login will accept an empty password");
+}
+const ADMIN_HASH = bcrypt.hashSync(ADMIN_PASSWORD, 10);
 
 // POST /api/auth/login
 router.post("/login", loginLimiter, async (req, res) => {
   const { username, password } = req.body || {};
-  const ADMIN_USER = process.env.ADMIN_USER || "admin";
-  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
   if (!username || !password) {
     return res.status(400).json({ error: "Username and password required" });
   }
 
-  // Constant-time username check
-  const userMatch = username === ADMIN_USER;
-  // bcrypt compare (or plain compare in dev — always use hashed in prod)
-  const passMatch = await bcrypt.compare(password, await bcrypt.hash(ADMIN_PASSWORD, 10))
-    .catch(() => false);
+  // Constant-time username comparison to prevent timing attacks
+  let userMatch = false;
+  try {
+    const userBuf = Buffer.from(username);
+    const adminBuf = Buffer.from(ADMIN_USER);
+    userMatch =
+      userBuf.length === adminBuf.length &&
+      crypto.timingSafeEqual(userBuf, adminBuf);
+  } catch {
+    userMatch = false;
+  }
 
-  // We re-hash every time intentionally to prevent timing attacks on username
-  const validPassword = password === ADMIN_PASSWORD;
+  // bcrypt.compare is inherently constant-time
+  const passMatch = await bcrypt.compare(password, ADMIN_HASH).catch(() => false);
 
-  if (!userMatch || !validPassword) {
+  if (!userMatch || !passMatch) {
     return res.status(401).json({ error: "Invalid credentials" });
   }
 

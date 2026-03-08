@@ -64,10 +64,24 @@ function initSchema() {
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- Core indexes (original)
     CREATE INDEX IF NOT EXISTS idx_ip_entries_subnet ON ip_entries(subnet_id);
-    CREATE INDEX IF NOT EXISTS idx_dns_zone ON dns_records(zone);
-    CREATE INDEX IF NOT EXISTS idx_scans_subnet ON scan_results(subnet_id);
+    CREATE INDEX IF NOT EXISTS idx_dns_zone          ON dns_records(zone);
+    CREATE INDEX IF NOT EXISTS idx_scans_subnet      ON scan_results(subnet_id);
+
+    -- Additional indexes for search performance
+    CREATE INDEX IF NOT EXISTS idx_ip_entries_ip ON ip_entries(ip);
+    CREATE INDEX IF NOT EXISTS idx_dns_name      ON dns_records(name);
+    CREATE INDEX IF NOT EXISTS idx_dns_value     ON dns_records(value);
+    CREATE INDEX IF NOT EXISTS idx_subnets_cidr  ON subnets(cidr);
   `);
 }
 
-module.exports = { getDb };
+function closeDb() {
+  if (db) {
+    db.close();
+    db = null;
+  }
+}
+
+module.exports = { getDb, closeDb };

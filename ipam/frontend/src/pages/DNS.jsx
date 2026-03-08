@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../lib/api";
-import { Icon, Modal, FormField, Button, Badge, PageHeader, EmptyState, inputStyle, Toast } from "../components/UI";
+import { Icon, Modal, FormField, Button, Badge, PageHeader, EmptyState, inputStyle, Toast, ConfirmModal } from "../components/UI";
 
 const TYPE_COLORS = { A: "#3b82f6", AAAA: "#6366f1", CNAME: "#8b5cf6", MX: "#f59e0b", TXT: "#10b981", PTR: "#06b6d4", NS: "#f97316", SRV: "#ec4899", CAA: "var(--text-muted)" };
 const DNS_TYPES = ["A", "AAAA", "CNAME", "MX", "TXT", "PTR", "NS", "SRV", "CAA"];
@@ -12,7 +12,9 @@ export default function DNS() {
   const [zones, setZones] = useState([]);
   const [selectedZone, setSelectedZone] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
@@ -42,20 +44,29 @@ export default function DNS() {
     if (!form.name.trim()) errs.name = "Obbligatorio";
     if (!form.value.trim()) errs.value = "Obbligatorio";
     if (Object.keys(errs).length) { setErrors(errs); return; }
+    setSaving(true);
     try {
       const payload = { ...form, ttl: parseInt(form.ttl) || 3600, priority: form.priority ? parseInt(form.priority) : undefined };
       if (editTarget) await api.updateDnsRecord(editTarget.id, payload);
       else await api.createDnsRecord(payload);
       setModal(null);
-      load();
+      await load();
       showToast(editTarget ? "Record aggiornato" : "Record creato");
     } catch (e) { showToast(e.message, "error"); }
+    finally { setSaving(false); }
   };
 
-  const del = async (id) => {
-    if (!confirm("Eliminare questo record?")) return;
-    try { await api.deleteDnsRecord(id); load(); showToast("Record eliminato", "warning"); }
-    catch (e) { showToast(e.message, "error"); }
+  const del = (id) => {
+    setConfirmModal({
+      title: "Elimina Record",
+      message: "Eliminare questo record DNS?",
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try { await api.deleteDnsRecord(id); await load(); showToast("Record eliminato", "warning"); }
+        catch (e) { showToast(e.message, "error"); }
+      },
+      onCancel: () => setConfirmModal(null),
+    });
   };
 
   const filtered = records.filter((r) => {
@@ -150,10 +161,21 @@ export default function DNS() {
             <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Opzionale" />
           </FormField>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-            <Button variant="ghost" onClick={() => setModal(null)}>Annulla</Button>
-            <Button onClick={save}><Icon d="M20 6L9 17l-5-5" size={14} /> {editTarget ? "Salva" : "Crea"}</Button>
+            <Button variant="ghost" onClick={() => setModal(null)} disabled={saving}>Annulla</Button>
+            <Button onClick={save} disabled={saving}>
+              <Icon d="M20 6L9 17l-5-5" size={14} /> {saving ? "Salvataggio..." : editTarget ? "Salva" : "Crea"}
+            </Button>
           </div>
         </Modal>
+      )}
+
+      {confirmModal && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={confirmModal.onCancel}
+        />
       )}
 
       {toast && <Toast {...toast} />}

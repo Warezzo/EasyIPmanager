@@ -113,6 +113,18 @@ export function PageHeader({ title, subtitle, action }) {
   );
 }
 
+export function ConfirmModal({ title, message, onConfirm, onCancel, danger = true }) {
+  return (
+    <Modal title={title} onClose={onCancel} width={380}>
+      <div style={{ color: "var(--text-secondary)", fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>{message}</div>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <Button variant="ghost" onClick={onCancel}>Annulla</Button>
+        <Button variant={danger ? "danger" : "primary"} onClick={onConfirm}>Conferma</Button>
+      </div>
+    </Modal>
+  );
+}
+
 export function EmptyState({ icon, title, subtitle }) {
   return (
     <div style={{ textAlign: "center", padding: "48px 24px", color: "var(--text-ghost)", border: "1px dashed var(--border-default)", borderRadius: 12 }}>

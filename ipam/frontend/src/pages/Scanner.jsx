@@ -14,10 +14,13 @@ export default function Scanner() {
   const [scans, setScans] = useState([]);
   const [subnets, setSubnets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
+  const [importing, setImporting] = useState({ subnet_id: "", hosts: [] });
+  const [importLoading, setImportLoading] = useState(false);
+  const [abortingIds, setAbortingIds] = useState(new Set());
   const [modal, setModal] = useState(null); // "new" | "result" | "import"
   const [selectedScan, setSelectedScan] = useState(null);
   const [form, setForm] = useState({ target: "", subnet_id: "", scan_type: "ping" });
-  const [importing, setImporting] = useState({ subnet_id: "", hosts: [] });
   const [toast, setToast] = useState(null);
   const pollRef = useRef(null);
 
@@ -47,7 +50,6 @@ export default function Scanner() {
         pollRef.current = null;
       }
     }
-    // Cleanup garantito al dismount indipendentemente dallo stato corrente
     return () => {
       if (pollRef.current) {
         clearInterval(pollRef.current);
@@ -58,17 +60,21 @@ export default function Scanner() {
 
   const startScan = async () => {
     if (!form.target.trim()) { showToast("Inserisci un target", "error"); return; }
+    setStarting(true);
     try {
       await api.startScan({ target: form.target, subnet_id: form.subnet_id || undefined, scan_type: form.scan_type });
       setModal(null);
       await loadScans();
       showToast("Scan avviato!");
     } catch (e) { showToast(e.message, "error"); }
+    finally { setStarting(false); }
   };
 
   const abort = async (id) => {
+    setAbortingIds((prev) => new Set(prev).add(id));
     try { await api.abortScan(id); await loadScans(); showToast("Scan interrotto", "warning"); }
     catch (e) { showToast(e.message, "error"); }
+    finally { setAbortingIds((prev) => { const s = new Set(prev); s.delete(id); return s; }); }
   };
 
   const openResult = async (scan) => {
@@ -88,11 +94,13 @@ export default function Scanner() {
     const selected = importing.hosts.filter((h) => h._selected);
     if (!importing.subnet_id) { showToast("Seleziona una subnet", "error"); return; }
     if (!selected.length) { showToast("Seleziona almeno un host", "error"); return; }
+    setImportLoading(true);
     try {
       const res = await api.importHosts(selectedScan.id, importing.subnet_id, selected);
       showToast(`Importati ${res.imported} host (${res.skipped} già presenti)`);
       setModal(null);
     } catch (e) { showToast(e.message, "error"); }
+    finally { setImportLoading(false); }
   };
 
   return (
@@ -109,9 +117,7 @@ export default function Scanner() {
           {scans.map((scan) => (
             <div key={scan.id} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", gap: 16 }}>
               {/* Status indicator */}
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: STATUS_COLORS[scan.status] || "#64748b", boxShadow: scan.status === "running" ? `0 0 8px ${STATUS_COLORS.running}` : "none", flexShrink: 0 }}>
-                {scan.status === "running" && <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>}
-              </div>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: STATUS_COLORS[scan.status] || "#64748b", boxShadow: scan.status === "running" ? `0 0 8px ${STATUS_COLORS.running}` : "none", flexShrink: 0 }} />
 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 3 }}>
@@ -128,8 +134,8 @@ export default function Scanner() {
 
               <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                 {scan.status === "running" && (
-                  <Button variant="danger" onClick={() => abort(scan.id)}>
-                    <Icon d="M18 6L6 18M6 6l12 12" size={13} /> Abort
+                  <Button variant="danger" onClick={() => abort(scan.id)} disabled={abortingIds.has(scan.id)}>
+                    <Icon d="M18 6L6 18M6 6l12 12" size={13} /> {abortingIds.has(scan.id) ? "..." : "Abort"}
                   </Button>
                 )}
                 {scan.status === "done" && scan.result?.hosts?.length > 0 && (
@@ -190,8 +196,10 @@ export default function Scanner() {
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-            <Button variant="ghost" onClick={() => setModal(null)}>Annulla</Button>
-            <Button onClick={startScan}><Icon d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 1 1 0 10h-2M8 12h8" size={14} /> Avvia Scansione</Button>
+            <Button variant="ghost" onClick={() => setModal(null)} disabled={starting}>Annulla</Button>
+            <Button onClick={startScan} disabled={starting}>
+              <Icon d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 1 1 0 10h-2M8 12h8" size={14} /> {starting ? "Avvio..." : "Avvia Scansione"}
+            </Button>
           </div>
         </Modal>
       )}
@@ -206,7 +214,7 @@ export default function Scanner() {
                 {selectedScan.result.hosts.map((h, i) => (
                   <div key={i} style={{ background: "var(--bg-overlay)", borderRadius: 8, padding: "10px 14px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <span style={{ fontFamily: "monospace", fontSize: 14, color: "#60a5fa" }}>{h.ip}</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 14, color: "var(--accent)" }}>{h.ip}</span>
                       {h.mac && <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace" }}>{h.mac}{h.vendor ? ` (${h.vendor})` : ""}</span>}
                     </div>
                     {h.hostname && <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>{h.hostname}</div>}
@@ -254,17 +262,19 @@ export default function Scanner() {
                   hosts[i] = { ...h, _selected: e.target.checked };
                   setImporting({ ...importing, hosts });
                 }} />
-                <span style={{ fontFamily: "monospace", fontSize: 13, color: "#60a5fa" }}>{h.ip}</span>
+                <span style={{ fontFamily: "monospace", fontSize: 13, color: "var(--accent)" }}>{h.ip}</span>
                 {h.hostname && <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{h.hostname}</span>}
                 {h.mac && <span style={{ fontSize: 11, color: "var(--text-faint)", marginLeft: "auto" }}>{h.mac}</span>}
               </label>
             ))}
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
-            <button onClick={() => setImporting({ ...importing, hosts: importing.hosts.map(h => ({ ...h, _selected: true })) })} style={{ background: "none", border: "none", color: "#3b82f6", cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>Seleziona tutti</button>
+            <button onClick={() => setImporting({ ...importing, hosts: importing.hosts.map(h => ({ ...h, _selected: true })) })} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>Seleziona tutti</button>
             <div style={{ display: "flex", gap: 8 }}>
-              <Button variant="ghost" onClick={() => setModal(null)}>Annulla</Button>
-              <Button onClick={doImport}><Icon d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" size={14} /> Importa</Button>
+              <Button variant="ghost" onClick={() => setModal(null)} disabled={importLoading}>Annulla</Button>
+              <Button onClick={doImport} disabled={importLoading}>
+                <Icon d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" size={14} /> {importLoading ? "Importazione..." : "Importa"}
+              </Button>
             </div>
           </div>
         </Modal>

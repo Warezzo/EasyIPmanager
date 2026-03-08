@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../hooks/useAuth.jsx";
 import { useTheme } from "../hooks/useTheme.jsx";
+import { Icon } from "./UI.jsx";
 
 const NAV = [
   { to: "/",        label: "IPAM",    icon: "M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 0 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 0-2-2V9m0 0h18" },
@@ -14,14 +15,6 @@ const THEME_OPTIONS = [
   { value: "light",  label: "Chiaro",  icon: "M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42M12 5a7 7 0 1 0 0 14A7 7 0 0 0 12 5z" },
   { value: "system", label: "Sistema", icon: "M2 13.5V19a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.5M2 13.5L12 2l10 11.5M2 13.5h20" },
 ];
-
-function Icon({ d, size = 18 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d={d} />
-    </svg>
-  );
-}
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();

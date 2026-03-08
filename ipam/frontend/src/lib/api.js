@@ -43,7 +43,7 @@ export const api = {
   deleteEntry: (subnetId, id) => request("DELETE", `/subnets/${subnetId}/entries/${id}`),
 
   // DNS
-  getDnsRecords: (zone) => request("GET", `/dns${zone ? `?zone=${zone}` : ""}`),
+  getDnsRecords: (zone) => request("GET", `/dns${zone ? `?zone=${encodeURIComponent(zone)}` : ""}`),
   getDnsZones: () => request("GET", "/dns/zones"),
   createDnsRecord: (data) => request("POST", "/dns", data),
   updateDnsRecord: (id, data) => request("PUT", `/dns/${id}`, data),

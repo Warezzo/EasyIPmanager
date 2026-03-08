@@ -24,23 +24,16 @@ const app = express();
 const PORT = process.env.PORT || 5050;
 
 // ── CORS — applied only to /api routes ────────────────────────────────────────
-// Static files are served same-origin; CORS is only needed for cross-origin API
-// access (e.g. Vite dev server on port 5173, or external tools).
-// Vite builds scripts with the `crossorigin` attribute which causes browsers to
-// send Origin even for same-origin fetches — so we must NOT apply CORS to the
-// static file middleware or it would block the JS bundle.
-const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim())
-  : ["http://localhost:5050", "http://localhost:5173"];
+// Do NOT apply CORS globally: Vite builds scripts with crossorigin attribute,
+// causing browsers to send Origin even for same-origin requests, which would
+// block static file serving.
 
-const corsMiddleware = cors({
-  origin: (origin, cb) => {
-    // Allow no-origin requests (curl, Postman, same-origin non-CORS requests)
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-    cb(new Error("Not allowed by CORS"));
-  },
-  credentials: true,
-});
+// All /api routes are protected by JWT — CORS here only needs to allow the
+// Vite dev server (different port). In production the frontend is same-origin
+// so the browser sends no Origin header for most requests.
+// We don't restrict by origin because JWTs in localStorage are not vulnerable
+// to CSRF (unlike cookies), so CORS doesn't add meaningful protection here.
+const corsMiddleware = cors({ origin: true, credentials: true });
 
 // ── Global rate limit on all API routes ───────────────────────────────────────
 const globalLimiter = rateLimit({

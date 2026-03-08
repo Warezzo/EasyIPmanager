@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  ipam:
+    build: .
+    container_name: ipam
+    restart: unless-stopped
+    ports:
+      - "${PORT:-5050}:5050"
+    volumes:
+      - ipam_data:/data
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/data/ipam.db
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      - PORT=5050
+    # NET_ADMIN + NET_RAW needed for nmap/ping
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    network_mode: host   # allows scanning the lab network directly
+    # Uncomment below and comment network_mode if you prefer bridge networking:
+    # networks:
+    #   - lab
+
+volumes:
+  ipam_data:
+
+# networks:
+#   lab:
+#     driver: bridge

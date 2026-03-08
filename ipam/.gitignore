@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+frontend/dist/
+
+# Environment — NEVER commit this
+.env
+
+# SQLite database
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docker volumes
+ipam_data/

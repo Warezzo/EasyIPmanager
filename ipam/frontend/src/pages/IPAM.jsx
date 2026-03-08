@@ -1,0 +1,389 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+import { api } from "../lib/api";
+import { cidrToInfo, ipToInt, isIPInSubnet, generateIPRange } from "../lib/utils";
+import { Icon, Modal, FormField, Button, Badge, SaturationBar, PageHeader, EmptyState, inputStyle, Toast } from "../components/UI";
+
+const TYPE_COLORS = { server: "#3b82f6", router: "#8b5cf6", switch: "#06b6d4", workstation: "#22c55e", printer: "#f97316", camera: "#ec4899", iot: "#eab308", other: "var(--text-muted)" };
+
+function IPGrid({ cidr, usedIPs }) {
+  const all = generateIPRange(cidr);
+  const usedSet = new Map(usedIPs.map((e) => [e.ip, e]));
+  const tooMany = all.length > 256;
+  const display = tooMany ? all.slice(0, 256) : all;
+  return (
+    <div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 3, padding: "8px 0" }}>
+        {display.map((ip) => {
+          const entry = usedSet.get(ip);
+          return (
+            <div key={ip} title={entry ? `${ip} — ${entry.hostname} (${entry.type})` : ip}
+              style={{ width: 14, height: 14, borderRadius: 2, background: entry ? "#3b82f6" : "var(--bg-raised)", border: `1px solid ${entry ? "#3b82f6" : "var(--bg-overlay)"}`, boxShadow: entry ? "0 0 4px #3b82f644" : "none", transition: "all 0.1s" }} />
+          );
+        })}
+      </div>
+      {tooMany && <div style={{ fontSize: 11, color: "var(--text-faint)" }}>Mostrati i primi 256 IP di {all.length}</div>}
+      <div style={{ display: "flex", gap: 12, marginTop: 6, fontSize: 11, color: "var(--text-muted)" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, background: "var(--accent)", borderRadius: 2, display: "inline-block" }} /> Assegnato</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, background: "var(--bg-raised)", border: "1px solid var(--border-default)", borderRadius: 2, display: "inline-block" }} /> Libero</span>
+      </div>
+    </div>
+  );
+}
+
+function SubnetCard({ subnet, used, total, onSelect, onEdit, onDelete }) {
+  const pct = total > 0 ? Math.round((used / total) * 100) : 0;
+  const statusColor = pct >= 90 ? "#ef4444" : pct >= 70 ? "#f97316" : pct >= 50 ? "#eab308" : "#22c55e";
+  return (
+    <div onClick={() => onSelect(subnet)} style={{ background: "var(--bg-raised)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 20, cursor: "pointer", transition: "all 0.2s", position: "relative", overflow: "hidden" }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#3b82f6"; e.currentTarget.style.boxShadow = "0 0 20px #3b82f622"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.boxShadow = "none"; }}>
+      <div style={{ position: "absolute", top: 0, right: 0, width: 60, height: 60, background: `${statusColor}11`, borderRadius: "0 12px 0 60px" }} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>{subnet.cidr}</span>
+            {subnet.vlan && <Badge color="#475569">VLAN {subnet.vlan}</Badge>}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{subnet.name}{subnet.location ? ` · ${subnet.location}` : ""}</div>
+        </div>
+        <div style={{ display: "flex", gap: 6 }} onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => onEdit(subnet)} style={{ background: "var(--bg-overlay)", border: "1px solid var(--border-strong)", color: "var(--text-muted)", cursor: "pointer", padding: "4px 8px", borderRadius: 6, display: "flex", alignItems: "center" }}>
+            <Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" size={13} />
+          </button>
+          <button onClick={() => onDelete(subnet.id)} style={{ background: "var(--bg-overlay)", border: "1px solid var(--border-strong)", color: "#ef444466", cursor: "pointer", padding: "4px 8px", borderRadius: 6, display: "flex", alignItems: "center" }}>
+            <Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={13} />
+          </button>
+        </div>
+      </div>
+      <SaturationBar used={used} total={total} />
+    </div>
+  );
+}
+
+// ── Resizable Table ───────────────────────────────────────────────────────────
+
+const COLS = [
+  { key: "ip",          label: "IP",          defaultW: 130 },
+  { key: "hostname",    label: "Hostname",    defaultW: 150 },
+  { key: "description", label: "Descrizione", defaultW: 200 },
+  { key: "mac",         label: "MAC",         defaultW: 140 },
+  { key: "type",        label: "Tipo",        defaultW: 90  },
+  { key: "actions",     label: "Azioni",      defaultW: 72  },
+];
+
+function ResizableHandle({ colKey, onMouseDown, isDragging }) {
+  const [hovered, setHovered] = useState(false);
+  const active = hovered || isDragging;
+  return (
+    <div
+      onMouseDown={(e) => onMouseDown(e, colKey)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 8, cursor: "col-resize", zIndex: 1, display: "flex", alignItems: "stretch", justifyContent: "center" }}>
+      <div style={{ width: 2, borderRadius: 2, background: active ? "var(--accent)" : "var(--border-default)", transition: "background 0.15s" }} />
+    </div>
+  );
+}
+
+function ResizableTable({ entries, onEdit, onDelete }) {
+  const [widths, setWidths] = useState(() => Object.fromEntries(COLS.map((c) => [c.key, c.defaultW])));
+  const dragging = useRef(null);
+  const [draggingKey, setDraggingKey] = useState(null);
+
+  const onMouseDown = (e, key) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = widths[key];
+    dragging.current = { key, startX, startW };
+    setDraggingKey(key);
+
+    const onMove = (ev) => {
+      if (!dragging.current) return;
+      const delta = ev.clientX - dragging.current.startX;
+      const newW = Math.max(50, dragging.current.startW + delta);
+      setWidths((prev) => ({ ...prev, [dragging.current.key]: newW }));
+    };
+
+    const onUp = () => {
+      dragging.current = null;
+      setDraggingKey(null);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  const templateCols = COLS.map((c) => `${widths[c.key]}px`).join(" ");
+  const sorted = [...entries].sort((a, b) => (ipToInt(a.ip) || 0) - (ipToInt(b.ip) || 0));
+
+  return (
+    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 12, overflow: "auto", cursor: draggingKey ? "col-resize" : "auto", userSelect: draggingKey ? "none" : "auto" }}>
+      <div style={{ minWidth: "fit-content" }}>
+        {/* Header */}
+        <div style={{ display: "grid", gridTemplateColumns: templateCols, borderBottom: "1px solid var(--border-subtle)", userSelect: "none" }}>
+          {COLS.map((col) => (
+            <div key={col.key} style={{ position: "relative", fontSize: 10, color: "var(--text-ghost)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <div style={{ padding: "10px 16px 10px 12px", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                {col.label}
+              </div>
+              {col.key !== "actions" && (
+                <ResizableHandle colKey={col.key} onMouseDown={onMouseDown} isDragging={draggingKey === col.key} />
+              )}
+            </div>
+          ))}
+        </div>
+        {/* Rows */}
+        {entries.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 32, color: "var(--text-ghost)", fontSize: 13 }}>Nessun IP assegnato</div>
+        ) : sorted.map((e) => (
+          <div key={e.id} style={{ display: "grid", gridTemplateColumns: templateCols, borderBottom: "1px solid var(--border-subtle)", alignItems: "center" }}
+            onMouseEnter={(ev) => { if (!draggingKey) ev.currentTarget.style.background = "var(--bg-raised)"; }}
+            onMouseLeave={(ev) => { if (!draggingKey) ev.currentTarget.style.background = "transparent"; }}>
+            <div style={{ padding: "10px 12px", overflow: "hidden" }}>
+              <span style={{ fontFamily: "monospace", fontSize: 13, color: "#60a5fa", whiteSpace: "nowrap" }}>{e.ip}</span>
+            </div>
+            <div style={{ padding: "10px 12px", overflow: "hidden" }}>
+              <div style={{ fontSize: 13, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.hostname}</div>
+              {e.tags?.length > 0 && <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 2 }}>{e.tags.map((t) => <Badge key={t} color="var(--text-ghost)">{t}</Badge>)}</div>}
+            </div>
+            <div style={{ padding: "10px 12px", overflow: "hidden" }}>
+              <span style={{ fontSize: 13, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }} title={e.description || ""}>{e.description || <span style={{ color: "var(--text-ghost)" }}>—</span>}</span>
+            </div>
+            <div style={{ padding: "10px 12px", overflow: "hidden" }}>
+              <span style={{ fontSize: 11, color: "var(--text-faint)", fontFamily: "monospace", whiteSpace: "nowrap" }}>{e.mac || "—"}</span>
+            </div>
+            <div style={{ padding: "10px 12px" }}>
+              <Badge color={TYPE_COLORS[e.type] || "var(--text-muted)"}>{e.type}</Badge>
+            </div>
+            <div style={{ padding: "10px 12px", display: "flex", gap: 4 }}>
+              <button onClick={() => onEdit(e)} style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 4, borderRadius: 4, transition: "color 0.1s" }} onMouseEnter={(ev) => ev.currentTarget.style.color = "var(--text-secondary)"} onMouseLeave={(ev) => ev.currentTarget.style.color = "var(--text-ghost)"}><Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" size={14} /></button>
+              <button onClick={() => onDelete(e.id)} style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 4, borderRadius: 4, transition: "color 0.1s" }} onMouseEnter={(ev) => ev.currentTarget.style.color = "#ef4444"} onMouseLeave={(ev) => ev.currentTarget.style.color = "var(--text-ghost)"}><Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={14} /></button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const emptySubnet = { name: "", cidr: "", vlan: "", location: "", description: "" };
+const emptyEntry = { ip: "", hostname: "", mac: "", type: "server", description: "", tags: "" };
+
+export default function IPAM() {
+  const [subnets, setSubnets] = useState([]);
+  const [entries, setEntries] = useState({}); // { subnetId: [...] }
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+  const [detailView, setDetailView] = useState("table");
+  const [modal, setModal] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
+  const [subnetForm, setSubnetForm] = useState(emptySubnet);
+  const [entryForm, setEntryForm] = useState(emptyEntry);
+  const [errors, setErrors] = useState({});
+  const [search, setSearch] = useState("");
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const subs = await api.getSubnets();
+      setSubnets(subs);
+      // Load entries for all subnets in parallel
+      const allEntries = await Promise.all(subs.map((s) => api.getEntries(s.id).then((e) => [s.id, e])));
+      setEntries(Object.fromEntries(allEntries));
+    } catch (e) { showToast(e.message, "error"); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const loadEntries = async (subnetId) => {
+    try {
+      const e = await api.getEntries(subnetId);
+      setEntries((prev) => ({ ...prev, [subnetId]: e }));
+    } catch (e) { showToast(e.message, "error"); }
+  };
+
+  // ── Subnet CRUD ──
+  const openAddSubnet = () => { setSubnetForm(emptySubnet); setErrors({}); setEditTarget(null); setModal("subnet"); };
+  const openEditSubnet = (s) => { setSubnetForm({ name: s.name, cidr: s.cidr, vlan: s.vlan || "", location: s.location || "", description: s.description || "" }); setErrors({}); setEditTarget(s); setModal("subnet"); };
+
+  const saveSubnet = async () => {
+    const errs = {};
+    if (!subnetForm.name.trim()) errs.name = "Nome obbligatorio";
+    if (!cidrToInfo(subnetForm.cidr)) errs.cidr = "CIDR non valido (es. 192.168.1.0/24)";
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    try {
+      if (editTarget) {
+        const updated = await api.updateSubnet(editTarget.id, subnetForm);
+        setSubnets((prev) => prev.map((s) => s.id === editTarget.id ? updated : s));
+        if (selected?.id === editTarget.id) setSelected(updated);
+        showToast("Subnet aggiornata");
+      } else {
+        await api.createSubnet(subnetForm);
+        await load();
+        showToast("Subnet creata");
+      }
+      setModal(null);
+    } catch (e) { showToast(e.message, "error"); }
+  };
+
+  const deleteSubnet = async (id) => {
+    if (!confirm("Eliminare questa subnet e tutti i suoi IP?")) return;
+    try {
+      await api.deleteSubnet(id);
+      setSubnets((prev) => prev.filter((s) => s.id !== id));
+      setEntries((prev) => { const n = { ...prev }; delete n[id]; return n; });
+      if (selected?.id === id) setSelected(null);
+      showToast("Subnet eliminata", "warning");
+    } catch (e) { showToast(e.message, "error"); }
+  };
+
+  // ── Entry CRUD ──
+  const openAddEntry = () => { setEntryForm(emptyEntry); setErrors({}); setEditTarget(null); setModal("entry"); };
+  const openEditEntry = (e) => { setEntryForm({ ip: e.ip, hostname: e.hostname, mac: e.mac || "", type: e.type, description: e.description || "", tags: (e.tags || []).join(", ") }); setErrors({}); setEditTarget(e); setModal("entry"); };
+
+  const saveEntry = async () => {
+    const errs = {};
+    if (!entryForm.ip.trim()) errs.ip = "IP obbligatorio";
+    else if (!isIPInSubnet(entryForm.ip, selected.cidr)) errs.ip = `IP non appartiene alla subnet ${selected.cidr}`;
+    if (!entryForm.hostname.trim()) errs.hostname = "Hostname obbligatorio";
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    const payload = { ...entryForm, tags: entryForm.tags.split(",").map((t) => t.trim()).filter(Boolean) };
+    try {
+      if (editTarget) await api.updateEntry(selected.id, editTarget.id, payload);
+      else await api.createEntry(selected.id, payload);
+      await loadEntries(selected.id);
+      setModal(null);
+      showToast(editTarget ? "IP aggiornato" : "IP assegnato");
+    } catch (e) { showToast(e.message, "error"); }
+  };
+
+  const deleteEntry = async (id) => {
+    if (!confirm("Rimuovere questo IP?")) return;
+    try {
+      await api.deleteEntry(selected.id, id);
+      await loadEntries(selected.id);
+      showToast("IP rimosso", "warning");
+    } catch (e) { showToast(e.message, "error"); }
+  };
+
+  const filteredSubnets = subnets.filter((s) => !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.cidr.includes(search) || (s.vlan && s.vlan.toString().includes(search)));
+  const subnetEntries = selected ? (entries[selected.id] || []) : [];
+  const info = selected ? cidrToInfo(selected.cidr) : null;
+
+  return (
+    <div style={{ padding: 24, display: "flex", gap: 24 }}>
+      {/* Left panel */}
+      <div style={{ width: selected ? 360 : "100%", flexShrink: 0, transition: "width 0.3s" }}>
+        <PageHeader title="Subnet" subtitle={`${subnets.length} subnet · ${Object.values(entries).flat().length} IP assegnati`}
+          action={<Button onClick={openAddSubnet}><Icon d="M12 5v14M5 12h14" size={14} /> Nuova Subnet</Button>} />
+        <div style={{ position: "relative", marginBottom: 16 }}>
+          <div style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-ghost)" }}><Icon d="M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" size={14} /></div>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cerca subnet, CIDR, VLAN..." style={{ ...inputStyle, paddingLeft: 32 }} />
+        </div>
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 48, color: "var(--text-ghost)", fontSize: 13 }}>Caricamento...</div>
+        ) : filteredSubnets.length === 0 ? (
+          <EmptyState icon={<Icon d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 0 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 0-2-2V9m0 0h18" size={32} />} title={subnets.length === 0 ? "Nessuna subnet" : "Nessun risultato"} subtitle={subnets.length === 0 ? "Crea la tua prima subnet" : ""} />
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: selected ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+            {filteredSubnets.map((s) => (
+              <SubnetCard key={s.id} subnet={s} used={(entries[s.id] || []).length} total={cidrToInfo(s.cidr)?.total || 0}
+                onSelect={(sub) => setSelected(selected?.id === sub.id ? null : sub)}
+                onEdit={openEditSubnet} onDelete={deleteSubnet} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Right panel: detail */}
+      {selected && info && (
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: "16px 20px", marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{selected.cidr}</span>
+                  {selected.vlan && <Badge color="#3b82f6">VLAN {selected.vlan}</Badge>}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{selected.name}{selected.location ? ` · ${selected.location}` : ""}</div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Button variant="ghost" onClick={() => setDetailView(detailView === "table" ? "grid" : "table")}>
+                  <Icon d={detailView === "table" ? "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" : "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"} size={13} />
+                  {detailView === "table" ? "Mappa" : "Tabella"}
+                </Button>
+                <Button onClick={openAddEntry}><Icon d="M12 5v14M5 12h14" size={14} /> Assegna IP</Button>
+                <Button variant="ghost" onClick={() => setSelected(null)}><Icon d="M18 6L6 18M6 6l12 12" size={14} /></Button>
+              </div>
+            </div>
+            <SaturationBar used={subnetEntries.length} total={info.total} />
+            <div style={{ display: "flex", gap: 20, marginTop: 10, fontSize: 11, color: "var(--text-faint)", flexWrap: "wrap" }}>
+              <span>Network: <b style={{ color: "var(--text-secondary)", fontWeight: 400 }}>{info.networkAddr}</b></span>
+              <span>Broadcast: <b style={{ color: "var(--text-secondary)", fontWeight: 400 }}>{info.broadcastAddr}</b></span>
+              <span>Host totali: <b style={{ color: "var(--text-secondary)", fontWeight: 400 }}>{info.total}</b></span>
+              <span>Liberi: <b style={{ color: "#22c55e", fontWeight: 400 }}>{info.total - subnetEntries.length}</b></span>
+            </div>
+          </div>
+
+          {detailView === "grid" ? (
+            <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-ghost)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Mappa IP</div>
+              <IPGrid cidr={selected.cidr} usedIPs={subnetEntries} />
+            </div>
+          ) : (
+            <ResizableTable entries={subnetEntries} onEdit={openEditEntry} onDelete={deleteEntry} />
+          )}
+        </div>
+      )}
+
+      {/* Subnet modal */}
+      {modal === "subnet" && (
+        <Modal title={editTarget ? "Modifica Subnet" : "Nuova Subnet"} onClose={() => setModal(null)}>
+          <FormField label="Nome" error={errors.name}><input style={inputStyle} value={subnetForm.name} onChange={(e) => setSubnetForm({ ...subnetForm, name: e.target.value })} placeholder="es. LAN Produzione" /></FormField>
+          <FormField label="CIDR" error={errors.cidr}><input style={inputStyle} value={subnetForm.cidr} onChange={(e) => setSubnetForm({ ...subnetForm, cidr: e.target.value })} placeholder="es. 192.168.10.0/24" /></FormField>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <FormField label="VLAN ID"><input style={inputStyle} value={subnetForm.vlan} onChange={(e) => setSubnetForm({ ...subnetForm, vlan: e.target.value })} placeholder="es. 100" /></FormField>
+            <FormField label="Location"><input style={inputStyle} value={subnetForm.location} onChange={(e) => setSubnetForm({ ...subnetForm, location: e.target.value })} placeholder="es. Rack A" /></FormField>
+          </div>
+          <FormField label="Descrizione"><textarea style={{ ...inputStyle, resize: "vertical", minHeight: 60 }} value={subnetForm.description} onChange={(e) => setSubnetForm({ ...subnetForm, description: e.target.value })} /></FormField>
+          {subnetForm.cidr && cidrToInfo(subnetForm.cidr) && (() => { const i = cidrToInfo(subnetForm.cidr); return <div style={{ background: "var(--bg-overlay)", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "var(--text-muted)", display: "flex", gap: 16 }}><span>Host: <b style={{ color: "var(--text-secondary)" }}>{i.total}</b></span><span>Net: <b style={{ color: "var(--text-secondary)" }}>{i.networkAddr}</b></span><span>Broadcast: <b style={{ color: "var(--text-secondary)" }}>{i.broadcastAddr}</b></span></div>; })()}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button variant="ghost" onClick={() => setModal(null)}>Annulla</Button>
+            <Button onClick={saveSubnet}><Icon d="M20 6L9 17l-5-5" size={14} /> {editTarget ? "Salva" : "Crea"}</Button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Entry modal */}
+      {modal === "entry" && (
+        <Modal title={editTarget ? "Modifica IP" : `Assegna IP — ${selected?.cidr}`} onClose={() => setModal(null)}>
+          <FormField label="Indirizzo IP" error={errors.ip}><input style={inputStyle} value={entryForm.ip} onChange={(e) => setEntryForm({ ...entryForm, ip: e.target.value })} placeholder="es. 192.168.1.10" /></FormField>
+          <FormField label="Hostname" error={errors.hostname}><input style={inputStyle} value={entryForm.hostname} onChange={(e) => setEntryForm({ ...entryForm, hostname: e.target.value })} placeholder="es. srv-prod-01" /></FormField>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <FormField label="MAC Address"><input style={inputStyle} value={entryForm.mac} onChange={(e) => setEntryForm({ ...entryForm, mac: e.target.value })} placeholder="AA:BB:CC:DD:EE:FF" /></FormField>
+            <FormField label="Tipo">
+              <select style={inputStyle} value={entryForm.type} onChange={(e) => setEntryForm({ ...entryForm, type: e.target.value })}>
+                {Object.keys(TYPE_COLORS).map((t) => <option key={t}>{t}</option>)}
+              </select>
+            </FormField>
+          </div>
+          <FormField label="Tags"><input style={inputStyle} value={entryForm.tags} onChange={(e) => setEntryForm({ ...entryForm, tags: e.target.value })} placeholder="prod, web, dmz" /></FormField>
+          <FormField label="Descrizione"><textarea style={{ ...inputStyle, resize: "vertical", minHeight: 60 }} value={entryForm.description} onChange={(e) => setEntryForm({ ...entryForm, description: e.target.value })} /></FormField>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button variant="ghost" onClick={() => setModal(null)}>Annulla</Button>
+            <Button onClick={saveEntry}><Icon d="M20 6L9 17l-5-5" size={14} /> {editTarget ? "Salva" : "Assegna"}</Button>
+          </div>
+        </Modal>
+      )}
+
+      {toast && <Toast {...toast} />}
+    </div>
+  );
+}

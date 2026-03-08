@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../hooks/useAuth.jsx";
 import { useTheme } from "../hooks/useTheme.jsx";
-import { Icon } from "./UI.jsx";
+import { Icon, NetworkLogo } from "./UI.jsx";
 
 const NAV = [
   { to: "/",        label: "IPAM",    icon: "M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 0 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 0-2-2V9m0 0h18" },
@@ -44,8 +44,8 @@ export default function Layout({ children }) {
         {/* Logo */}
         <div style={{ padding: "20px 16px 16px", borderBottom: "1px solid var(--border-subtle)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 30, height: 30, background: "linear-gradient(135deg, #10b981, #06b6d4)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <Icon d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 0 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 0-2-2V9m0 0h18" size={14} />
+            <div style={{ flexShrink: 0 }}>
+              <NetworkLogo size={30} />
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>EasyIPmanager</div>

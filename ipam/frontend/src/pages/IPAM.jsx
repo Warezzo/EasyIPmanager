@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { api } from "../lib/api";
 import { cidrToInfo, ipToInt, isIPInSubnet, generateIPRange } from "../lib/utils";
 import { Icon, Modal, FormField, Button, Badge, SaturationBar, PageHeader, EmptyState, inputStyle, Toast, ConfirmModal } from "../components/UI";
@@ -86,7 +86,7 @@ function ResizableHandle({ colKey, onMouseDown, isDragging }) {
   );
 }
 
-function ResizableTable({ entries, onEdit, onDelete }) {
+function ResizableTable({ entries, onEdit, onDelete, onBulkDelete }) {
   const [widths, setWidths] = useState(() => {
     const defaults = Object.fromEntries(COLS.map((c) => [c.key, c.defaultW]));
     try {
@@ -96,11 +96,14 @@ function ResizableTable({ entries, onEdit, onDelete }) {
   });
   const dragging = useRef(null);
   const [draggingKey, setDraggingKey] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
-  // Persist column widths to localStorage on every change
   useEffect(() => {
     try { localStorage.setItem(COLS_STORAGE_KEY, JSON.stringify(widths)); } catch {}
   }, [widths]);
+
+  // Clear selection whenever the entry list changes (subnet switch)
+  useEffect(() => { setSelectedIds(new Set()); }, [entries]);
 
   const onMouseDown = (e, key) => {
     e.preventDefault();
@@ -128,56 +131,85 @@ function ResizableTable({ entries, onEdit, onDelete }) {
     window.addEventListener("mouseup", onUp);
   };
 
-  const templateCols = COLS.map((c) => `${widths[c.key]}px`).join(" ");
-  const sorted = [...entries].sort((a, b) => (ipToInt(a.ip) || 0) - (ipToInt(b.ip) || 0));
+  const sorted = useMemo(() => [...entries].sort((a, b) => (ipToInt(a.ip) || 0) - (ipToInt(b.ip) || 0)), [entries]);
+  const allSelected = sorted.length > 0 && selectedIds.size === sorted.length;
+  const toggleAll = () => setSelectedIds(allSelected ? new Set() : new Set(sorted.map((e) => e.id)));
+  const toggleOne = (id) => setSelectedIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+  const templateCols = `36px ${COLS.map((c) => `${widths[c.key]}px`).join(" ")}`;
+  const cbStyle = { width: 14, height: 14, accentColor: "var(--accent)", cursor: "pointer" };
 
   return (
-    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 12, overflow: "auto", cursor: draggingKey ? "col-resize" : "auto", userSelect: draggingKey ? "none" : "auto" }}>
-      <div style={{ minWidth: "fit-content" }}>
-        {/* Header */}
-        <div style={{ display: "grid", gridTemplateColumns: templateCols, borderBottom: "1px solid var(--border-subtle)", userSelect: "none" }}>
-          {COLS.map((col) => (
-            <div key={col.key} style={{ position: "relative", fontSize: 10, color: "var(--text-ghost)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              <div style={{ padding: "10px 16px 10px 12px", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                {col.label}
-              </div>
-              {col.key !== "actions" && (
-                <ResizableHandle colKey={col.key} onMouseDown={onMouseDown} isDragging={draggingKey === col.key} />
-              )}
-            </div>
-          ))}
+    <>
+      {selectedIds.size > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", marginBottom: 8, background: "var(--accent-bg)", border: "1px solid var(--accent)", borderRadius: 8, fontSize: 12, color: "var(--accent)" }}>
+          <span style={{ flex: 1 }}>{selectedIds.size} IP selezionat{selectedIds.size === 1 ? "o" : "i"}</span>
+          <button onClick={() => onBulkDelete([...selectedIds])}
+            style={{ background: "#ef444422", border: "1px solid #ef444444", color: "#ef4444", cursor: "pointer", padding: "4px 12px", borderRadius: 6, fontSize: 12, fontFamily: "inherit" }}>
+            Elimina selezionati
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            style={{ background: "none", border: "1px solid var(--border-default)", color: "var(--text-muted)", cursor: "pointer", padding: "4px 10px", borderRadius: 6, fontSize: 12, fontFamily: "inherit" }}>
+            Deseleziona
+          </button>
         </div>
-        {/* Rows */}
-        {entries.length === 0 ? (
-          <div style={{ textAlign: "center", padding: 32, color: "var(--text-ghost)", fontSize: 13 }}>Nessun IP assegnato</div>
-        ) : sorted.map((e) => (
-          <div key={e.id} style={{ display: "grid", gridTemplateColumns: templateCols, borderBottom: "1px solid var(--border-subtle)", alignItems: "center" }}
-            onMouseEnter={(ev) => { if (!draggingKey) ev.currentTarget.style.background = "var(--bg-raised)"; }}
-            onMouseLeave={(ev) => { if (!draggingKey) ev.currentTarget.style.background = "transparent"; }}>
-            <div style={{ padding: "10px 12px", overflow: "hidden" }}>
-              <span style={{ fontFamily: "monospace", fontSize: 13, color: "var(--accent)", whiteSpace: "nowrap" }}>{e.ip}</span>
+      )}
+      <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: 12, overflow: "auto", cursor: draggingKey ? "col-resize" : "auto", userSelect: draggingKey ? "none" : "auto" }}>
+        <div style={{ minWidth: "fit-content" }}>
+          {/* Header */}
+          <div style={{ display: "grid", gridTemplateColumns: templateCols, borderBottom: "1px solid var(--border-subtle)", userSelect: "none" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "8px 0" }}>
+              <input type="checkbox" checked={allSelected} onChange={toggleAll} style={cbStyle} />
             </div>
-            <div style={{ padding: "10px 12px", overflow: "hidden" }}>
-              <div style={{ fontSize: 13, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.hostname}</div>
-              {e.tags?.length > 0 && <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 2 }}>{e.tags.map((t) => <Badge key={t} color="var(--text-ghost)">{t}</Badge>)}</div>}
-            </div>
-            <div style={{ padding: "10px 12px", overflow: "hidden" }}>
-              <span style={{ fontSize: 13, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }} title={e.description || ""}>{e.description || <span style={{ color: "var(--text-ghost)" }}>—</span>}</span>
-            </div>
-            <div style={{ padding: "10px 12px", overflow: "hidden" }}>
-              <span style={{ fontSize: 11, color: "var(--text-faint)", fontFamily: "monospace", whiteSpace: "nowrap" }}>{e.mac || "—"}</span>
-            </div>
-            <div style={{ padding: "10px 12px" }}>
-              <Badge color={TYPE_COLORS[e.type] || "var(--text-muted)"}>{e.type}</Badge>
-            </div>
-            <div style={{ padding: "10px 12px", display: "flex", gap: 4 }}>
-              <button onClick={() => onEdit(e)} style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 4, borderRadius: 4, transition: "color 0.1s" }} onMouseEnter={(ev) => ev.currentTarget.style.color = "var(--text-secondary)"} onMouseLeave={(ev) => ev.currentTarget.style.color = "var(--text-ghost)"}><Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" size={14} /></button>
-              <button onClick={() => onDelete(e.id)} style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 4, borderRadius: 4, transition: "color 0.1s" }} onMouseEnter={(ev) => ev.currentTarget.style.color = "#ef4444"} onMouseLeave={(ev) => ev.currentTarget.style.color = "var(--text-ghost)"}><Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={14} /></button>
-            </div>
+            {COLS.map((col) => (
+              <div key={col.key} style={{ position: "relative", fontSize: 10, color: "var(--text-ghost)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <div style={{ padding: "8px 16px 8px 12px", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                  {col.label}
+                </div>
+                {col.key !== "actions" && (
+                  <ResizableHandle colKey={col.key} onMouseDown={onMouseDown} isDragging={draggingKey === col.key} />
+                )}
+              </div>
+            ))}
           </div>
-        ))}
+          {/* Rows */}
+          {entries.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 32, color: "var(--text-ghost)", fontSize: 13 }}>Nessun IP assegnato</div>
+          ) : sorted.map((e) => {
+            const isSelected = selectedIds.has(e.id);
+            return (
+              <div key={e.id}
+                style={{ display: "grid", gridTemplateColumns: templateCols, borderBottom: "1px solid var(--border-subtle)", alignItems: "center", background: isSelected ? "var(--accent-bg)" : "transparent" }}
+                onMouseEnter={(ev) => { if (!draggingKey) ev.currentTarget.style.background = "var(--bg-raised)"; }}
+                onMouseLeave={(ev) => { if (!draggingKey) ev.currentTarget.style.background = isSelected ? "var(--accent-bg)" : "transparent"; }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <input type="checkbox" checked={isSelected} onChange={() => toggleOne(e.id)} onClick={(ev) => ev.stopPropagation()} style={cbStyle} />
+                </div>
+                <div style={{ padding: "7px 12px", overflow: "hidden" }}>
+                  <span style={{ fontFamily: "monospace", fontSize: 13, color: "var(--accent)", whiteSpace: "nowrap" }}>{e.ip}</span>
+                </div>
+                <div style={{ padding: "7px 12px", overflow: "hidden" }}>
+                  <div style={{ fontSize: 13, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.hostname}</div>
+                </div>
+                <div style={{ padding: "7px 12px", overflow: "hidden" }}>
+                  <span style={{ fontSize: 13, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }} title={e.description || ""}>{e.description || <span style={{ color: "var(--text-ghost)" }}>—</span>}</span>
+                </div>
+                <div style={{ padding: "7px 12px", overflow: "hidden" }}>
+                  <span style={{ fontSize: 11, color: "var(--text-faint)", fontFamily: "monospace", whiteSpace: "nowrap" }}>{e.mac || "—"}</span>
+                </div>
+                <div style={{ padding: "7px 12px" }}>
+                  <Badge color={TYPE_COLORS[e.type] || "var(--text-muted)"}>{e.type}</Badge>
+                </div>
+                <div style={{ padding: "7px 12px", display: "flex", gap: 4 }}>
+                  <button onClick={() => onEdit(e)} style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 4, borderRadius: 4, transition: "color 0.1s" }} onMouseEnter={(ev) => ev.currentTarget.style.color = "var(--text-secondary)"} onMouseLeave={(ev) => ev.currentTarget.style.color = "var(--text-ghost)"}><Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" size={14} /></button>
+                  <button onClick={() => onDelete(e.id)} style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 4, borderRadius: 4, transition: "color 0.1s" }} onMouseEnter={(ev) => ev.currentTarget.style.color = "#ef4444"} onMouseLeave={(ev) => ev.currentTarget.style.color = "var(--text-ghost)"}><Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={14} /></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -324,6 +356,22 @@ export default function IPAM() {
     });
   };
 
+  const bulkDeleteEntries = (ids) => {
+    setConfirmModal({
+      title: "Elimina IP selezionati",
+      message: `Eliminare ${ids.length} indirizzi IP? L'operazione è irreversibile.`,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          await Promise.all(ids.map((id) => api.deleteEntry(selected.id, id)));
+          await loadEntries(selected.id);
+          showToast(`${ids.length} IP eliminati`, "warning");
+        } catch (e) { showToast(e.message, "error"); }
+      },
+      onCancel: () => setConfirmModal(null),
+    });
+  };
+
   const filteredSubnets = subnets.filter((s) => !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.cidr.includes(search) || (s.vlan && s.vlan.toString().includes(search)));
   const subnetEntries = selected ? (entries[selected.id] || []) : [];
   const info = selected ? cidrToInfo(selected.cidr) : null;
@@ -408,7 +456,7 @@ export default function IPAM() {
               <IPGrid cidr={selected.cidr} usedIPs={subnetEntries} />
             </div>
           ) : (
-            <ResizableTable entries={subnetEntries} onEdit={openEditEntry} onDelete={deleteEntry} />
+            <ResizableTable entries={subnetEntries} onEdit={openEditEntry} onDelete={deleteEntry} onBulkDelete={bulkDeleteEntries} />
           )}
         </div>
       )}

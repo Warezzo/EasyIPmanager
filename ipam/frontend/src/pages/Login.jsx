@@ -1,35 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth.jsx";
-import { inputStyle } from "../components/UI";
-
-function NetworkLogo() {
-  return (
-    <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Outer dashed ring */}
-      <circle cx="28" cy="28" r="26.5" stroke="#10b981" strokeWidth="0.75" strokeDasharray="3.5 3" opacity="0.25" />
-      {/* Connection lines to corner nodes */}
-      <line x1="28" y1="28" x2="11" y2="14" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
-      <line x1="28" y1="28" x2="45" y2="14" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
-      <line x1="28" y1="28" x2="11" y2="42" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
-      <line x1="28" y1="28" x2="45" y2="42" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
-      {/* Cross-links between corner nodes */}
-      <line x1="11" y1="14" x2="45" y2="14" stroke="#10b981" strokeWidth="0.75" strokeLinecap="round" opacity="0.2" />
-      <line x1="11" y1="42" x2="45" y2="42" stroke="#10b981" strokeWidth="0.75" strokeLinecap="round" opacity="0.2" />
-      <line x1="11" y1="14" x2="11" y2="42" stroke="#10b981" strokeWidth="0.75" strokeLinecap="round" opacity="0.2" />
-      <line x1="45" y1="14" x2="45" y2="42" stroke="#10b981" strokeWidth="0.75" strokeLinecap="round" opacity="0.2" />
-      {/* Corner nodes */}
-      <circle cx="11" cy="14" r="3" fill="#10b981" opacity="0.55" />
-      <circle cx="45" cy="14" r="3" fill="#10b981" opacity="0.55" />
-      <circle cx="11" cy="42" r="3" fill="#10b981" opacity="0.55" />
-      <circle cx="45" cy="42" r="3" fill="#10b981" opacity="0.55" />
-      {/* Central node — outer ring */}
-      <circle cx="28" cy="28" r="9" fill="#052e16" stroke="#10b981" strokeWidth="1.5" />
-      {/* Central node — inner dot */}
-      <circle cx="28" cy="28" r="4" fill="#10b981" />
-    </svg>
-  );
-}
+import { inputStyle, NetworkLogo } from "../components/UI";
 
 export default function Login() {
   const { login } = useAuth();

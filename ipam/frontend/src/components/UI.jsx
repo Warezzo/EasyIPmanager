@@ -1,5 +1,27 @@
 // Shared UI primitives — theme-aware via CSS variables
 
+export function NetworkLogo({ size = 56 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="28" cy="28" r="26.5" stroke="#10b981" strokeWidth="0.75" strokeDasharray="3.5 3" opacity="0.25" />
+      <line x1="28" y1="28" x2="11" y2="14" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
+      <line x1="28" y1="28" x2="45" y2="14" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
+      <line x1="28" y1="28" x2="11" y2="42" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
+      <line x1="28" y1="28" x2="45" y2="42" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
+      <line x1="11" y1="14" x2="45" y2="14" stroke="#10b981" strokeWidth="0.75" strokeLinecap="round" opacity="0.2" />
+      <line x1="11" y1="42" x2="45" y2="42" stroke="#10b981" strokeWidth="0.75" strokeLinecap="round" opacity="0.2" />
+      <line x1="11" y1="14" x2="11" y2="42" stroke="#10b981" strokeWidth="0.75" strokeLinecap="round" opacity="0.2" />
+      <line x1="45" y1="14" x2="45" y2="42" stroke="#10b981" strokeWidth="0.75" strokeLinecap="round" opacity="0.2" />
+      <circle cx="11" cy="14" r="3" fill="#10b981" opacity="0.55" />
+      <circle cx="45" cy="14" r="3" fill="#10b981" opacity="0.55" />
+      <circle cx="11" cy="42" r="3" fill="#10b981" opacity="0.55" />
+      <circle cx="45" cy="42" r="3" fill="#10b981" opacity="0.55" />
+      <circle cx="28" cy="28" r="9" fill="var(--accent-bg)" stroke="#10b981" strokeWidth="1.5" />
+      <circle cx="28" cy="28" r="4" fill="#10b981" />
+    </svg>
+  );
+}
+
 export const inputStyle = {
   width: "100%",
   background: "var(--bg-input)",

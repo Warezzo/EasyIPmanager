@@ -2,8 +2,6 @@
 
 Tool modulare per la gestione degli indirizzi IP del laboratorio. Self-hosted, deployabile come singolo Docker container.
 
-> **Progetto GitHub:** [github.com/TUO_USERNAME/EasyIPmanager](https://github.com/TUO_USERNAME/EasyIPmanager)
-
 ## Funzionalità
 
 - **IPAM** — Gestione subnet (CIDR), assegnazione IP, visualizzazione saturazione, mappa IP grafica, export CSV, avviso capacità
@@ -16,7 +14,7 @@ Tool modulare per la gestione degli indirizzi IP del laboratorio. Self-hosted, d
 ### 1. Clona il repository
 
 ```bash
-git clone https://github.com/TUO_USERNAME/EasyIPmanager.git
+git clone https://github.com/Warezzo/EasyIPmanager.git
 cd EasyIPmanager/ipam
 ```
 

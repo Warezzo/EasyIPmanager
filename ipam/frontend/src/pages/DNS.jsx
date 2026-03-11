@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { api } from "../lib/api";
 import { Icon, Modal, FormField, Button, Badge, PageHeader, EmptyState, inputStyle, Toast, ConfirmModal } from "../components/UI";
 
@@ -69,13 +69,15 @@ export default function DNS() {
     });
   };
 
-  const filtered = records.filter((r) => {
+  const filtered = useMemo(() => records.filter((r) => {
     if (selectedZone !== "all" && r.zone !== selectedZone) return false;
     if (search) return r.name.includes(search) || r.value.includes(search) || r.zone.includes(search);
     return true;
-  });
+  }), [records, selectedZone, search]);
 
-  const grouped = filtered.reduce((acc, r) => { (acc[r.zone] = acc[r.zone] || []).push(r); return acc; }, {});
+  const grouped = useMemo(() =>
+    filtered.reduce((acc, r) => { (acc[r.zone] = acc[r.zone] || []).push(r); return acc; }, {}),
+  [filtered]);
 
   return (
     <div style={{ padding: 24 }}>
@@ -109,7 +111,7 @@ export default function DNS() {
               <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 80px 1fr 60px 80px", gap: 12, padding: "10px 16px", borderBottom: "1px solid var(--border-subtle)", fontSize: 10, color: "var(--text-ghost)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 <span>Type</span><span>Name</span><span>TTL</span><span>Value</span><span>Prio</span><span>Azioni</span>
               </div>
-              {zoneRecords.sort((a, b) => a.name.localeCompare(b.name)).map((r) => (
+              {[...zoneRecords].sort((a, b) => a.name.localeCompare(b.name)).map((r) => (
                 <div key={r.id} style={{ display: "grid", gridTemplateColumns: "80px 1fr 80px 1fr 60px 80px", gap: 12, padding: "10px 16px", borderBottom: "1px solid var(--border-subtle)", alignItems: "center", transition: "background 0.1s" }}
                   onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-raised)"} onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                   <span><Badge color={TYPE_COLORS[r.type] || "#64748b"}>{r.type}</Badge></span>

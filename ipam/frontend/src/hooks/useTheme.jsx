@@ -44,25 +44,31 @@ const LIGHT = {
   "--shadow-toast":   "0 8px 32px #00000018",
 };
 
-// ── Context ───────────────────────────────────────────────────────────────────
+// ── Helpers (module-level so they're usable in the useState initializer) ──────
 
-const ThemeContext = createContext(null);
+function resolveTokens(t) {
+  if (t === "system") {
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? LIGHT : DARK;
+  }
+  return t === "light" ? LIGHT : DARK;
+}
 
 function applyTokens(tokens) {
   const root = document.documentElement;
   Object.entries(tokens).forEach(([k, v]) => root.style.setProperty(k, v));
 }
 
-export function ThemeProvider({ children }) {
-  // "dark" | "light" | "system"
-  const [theme, setThemeState] = useState(() => localStorage.getItem("ipam_theme") || "dark");
+// ── Context ───────────────────────────────────────────────────────────────────
 
-  const resolveTokens = (t) => {
-    if (t === "system") {
-      return window.matchMedia("(prefers-color-scheme: light)").matches ? LIGHT : DARK;
-    }
-    return t === "light" ? LIGHT : DARK;
-  };
+const ThemeContext = createContext(null);
+
+export function ThemeProvider({ children }) {
+  // Apply tokens synchronously before the first paint to prevent FOUC
+  const [theme, setThemeState] = useState(() => {
+    const t = localStorage.getItem("ipam_theme") || "dark";
+    applyTokens(resolveTokens(t));
+    return t;
+  });
 
   useEffect(() => {
     applyTokens(resolveTokens(theme));

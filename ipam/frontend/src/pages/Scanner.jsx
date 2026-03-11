@@ -78,9 +78,11 @@ export default function Scanner() {
   };
 
   const openResult = async (scan) => {
-    if (!scan.result) { const fresh = await api.getScan(scan.id); setSelectedScan(fresh); }
-    else setSelectedScan(scan);
-    setModal("result");
+    try {
+      const target = scan.result ? scan : await api.getScan(scan.id);
+      setSelectedScan(target);
+      setModal("result");
+    } catch (e) { showToast(e.message, "error"); }
   };
 
   const openImport = (scan) => {
@@ -211,8 +213,8 @@ export default function Scanner() {
             <div>
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>{selectedScan.result.hosts.length} host trovati</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 400, overflowY: "auto" }}>
-                {selectedScan.result.hosts.map((h, i) => (
-                  <div key={i} style={{ background: "var(--bg-overlay)", borderRadius: 8, padding: "10px 14px" }}>
+                {selectedScan.result.hosts.map((h) => (
+                  <div key={h.ip} style={{ background: "var(--bg-overlay)", borderRadius: 8, padding: "10px 14px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                       <span style={{ fontFamily: "monospace", fontSize: 14, color: "var(--accent)" }}>{h.ip}</span>
                       {h.mac && <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace" }}>{h.mac}{h.vendor ? ` (${h.vendor})` : ""}</span>}
@@ -255,12 +257,10 @@ export default function Scanner() {
             Seleziona gli host da importare ({importing.hosts.filter(h => h._selected).length} selezionati):
           </div>
           <div style={{ maxHeight: 300, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
-            {importing.hosts.map((h, i) => (
-              <label key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: h._selected ? "var(--accent-bg)" : "var(--bg-overlay)", borderRadius: 8, cursor: "pointer", border: `1px solid ${h._selected ? "var(--accent)" : "transparent"}` }}>
+            {importing.hosts.map((h) => (
+              <label key={h.ip} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: h._selected ? "var(--accent-bg)" : "var(--bg-overlay)", borderRadius: 8, cursor: "pointer", border: `1px solid ${h._selected ? "var(--accent)" : "transparent"}` }}>
                 <input type="checkbox" checked={h._selected} onChange={(e) => {
-                  const hosts = [...importing.hosts];
-                  hosts[i] = { ...h, _selected: e.target.checked };
-                  setImporting({ ...importing, hosts });
+                  setImporting((prev) => ({ ...prev, hosts: prev.hosts.map((x) => x.ip === h.ip ? { ...x, _selected: e.target.checked } : x) }));
                 }} />
                 <span style={{ fontFamily: "monospace", fontSize: 13, color: "var(--accent)" }}>{h.ip}</span>
                 {h.hostname && <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{h.hostname}</span>}

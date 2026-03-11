@@ -101,7 +101,13 @@ router.post("/start", scanStartLimiter, (req, res) => {
     const db2 = getDb();
     try {
       const parsed = parseNmapOutput(stdout);
-      const result = { hosts: parsed, raw: stdout, stderr };
+      // Keep at most 64 KB of raw output in the DB — enough for debugging,
+      // prevents scan_results from bloating SQLite with multi-MB nmap logs
+      const MAX_RAW_DB = 64 * 1024;
+      const rawDb = stdout.length > MAX_RAW_DB
+        ? stdout.slice(0, MAX_RAW_DB) + "\n…[output troncato — mostra solo i primi 64 KB]"
+        : stdout;
+      const result = { hosts: parsed, raw: rawDb, stderr: stderr.slice(0, 4096) };
       if (bufOverflow) result.warning = "Output truncated at 10 MB — scan too large";
       db2.prepare("UPDATE scan_results SET status=?,finished_at=?,result=? WHERE id=?")
         .run(code === 0 ? "done" : "error", new Date().toISOString(), JSON.stringify(result), id);

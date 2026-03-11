@@ -9,7 +9,10 @@ function getDb() {
   if (!db) {
     db = new Database(DB_PATH);
     db.pragma("journal_mode = WAL");
+    db.pragma("synchronous = NORMAL");   // safe with WAL; faster than FULL
     db.pragma("foreign_keys = ON");
+    db.pragma("cache_size = -32000");    // 32 MB page cache
+    db.pragma("temp_store = MEMORY");    // temp tables/indexes in RAM
     initSchema();
   }
   return db;

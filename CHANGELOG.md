@@ -23,6 +23,7 @@ Il versionamento segue [Semantic Versioning](https://semver.org/lang/it/): `MAJO
 - **DB — pragma SQLite di performance**: aggiunti `synchronous = NORMAL` (sicuro con WAL, più veloce di FULL), `cache_size = -32000` (32 MB di cache pagine), `temp_store = MEMORY` (tabelle temporanee in RAM)
 
 ### Aggiunto
+- **Scanner — Eliminazione scansioni**: pulsante cestino su ogni scansione completata, abortita o in errore; modale di conferma prima della cancellazione. Nuovo endpoint `DELETE /api/scanner/:id` (blocca con HTTP 409 se la scansione è ancora in corso).
 - **IPAM — Selezione massiva IP**: checkbox per ogni riga della tabella, "seleziona tutti" nell'header, barra azione con contatore e pulsante *Elimina selezionati* con modale di conferma
 - **NetworkLogo unificato**: il logo SVG della schermata di login viene ora mostrato anche nella sidebar interna, estratto come componente condiviso in `UI.jsx` con prop `size`
 - **Backend — Validazione CIDR server-side**: `POST /api/subnets` e `PUT /api/subnets/:id` rifiutano con HTTP 400 valori non conformi (es. ottetti > 255, prefisso fuori range)

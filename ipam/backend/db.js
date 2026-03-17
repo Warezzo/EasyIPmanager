@@ -72,12 +72,24 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_dns_zone          ON dns_records(zone);
     CREATE INDEX IF NOT EXISTS idx_scans_subnet      ON scan_results(subnet_id);
 
+    CREATE TABLE IF NOT EXISTS ssh_hosts (
+      id               TEXT PRIMARY KEY,
+      name             TEXT NOT NULL,
+      host             TEXT NOT NULL,
+      port             INTEGER NOT NULL DEFAULT 22,
+      username         TEXT NOT NULL,
+      auth_type        TEXT NOT NULL CHECK(auth_type IN ('password','key')),
+      encrypted_secret TEXT,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- Additional indexes for search performance
     CREATE INDEX IF NOT EXISTS idx_ip_entries_ip        ON ip_entries(ip);
     CREATE INDEX IF NOT EXISTS idx_ip_entries_subnet_ip ON ip_entries(subnet_id, ip);
     CREATE INDEX IF NOT EXISTS idx_dns_name             ON dns_records(name);
     CREATE INDEX IF NOT EXISTS idx_dns_value            ON dns_records(value);
     CREATE INDEX IF NOT EXISTS idx_subnets_cidr         ON subnets(cidr);
+    CREATE INDEX IF NOT EXISTS idx_ssh_hosts_host        ON ssh_hosts(host);
   `);
 }
 

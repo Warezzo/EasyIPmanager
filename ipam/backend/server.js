@@ -8,6 +8,8 @@ const authRoutes = require("./routes/auth");
 const subnetRoutes = require("./routes/subnets");
 const dnsRoutes = require("./routes/dns");
 const scannerRoutes = require("./routes/scanner");
+const sshRoutes = require("./routes/ssh");
+const { attachSshWs } = require("./routes/sshWs");
 const { closeDb } = require("./db");
 
 // ── Env validation ─────────────────────────────────────────────────────────────
@@ -54,6 +56,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/subnets", subnetRoutes);
 app.use("/api/dns", dnsRoutes);
 app.use("/api/scanner", scannerRoutes);
+app.use("/api/ssh", sshRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) => res.json({ ok: true, version: "1.1.0" }));
@@ -79,6 +82,8 @@ const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`DB: ${process.env.DB_PATH || "local"}`);
   if (!process.env.JWT_SECRET) console.warn("WARNING: JWT_SECRET not set — using insecure default");
 });
+
+attachSshWs(server);
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────────
 function shutdown(signal) {

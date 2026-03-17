@@ -62,4 +62,10 @@ export const api = {
   abortScan: (id) => request("POST", `/scanner/${id}/abort`),
   importHosts: (scanId, subnet_id, hosts) => request("POST", `/scanner/${scanId}/import`, { subnet_id, hosts }),
   deleteScan: (id) => request("DELETE", `/scanner/${id}`),
+
+  // SSH Hosts
+  getSshHosts: () => request("GET", "/ssh/hosts"),
+  createSshHost: (data) => request("POST", "/ssh/hosts", data),
+  updateSshHost: (id, data) => request("PUT", `/ssh/hosts/${id}`, data),
+  deleteSshHost: (id) => request("DELETE", `/ssh/hosts/${id}`),
 };

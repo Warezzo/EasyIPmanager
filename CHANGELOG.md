@@ -23,6 +23,7 @@ Il versionamento segue [Semantic Versioning](https://semver.org/lang/it/): `MAJO
 - **DB — pragma SQLite di performance**: aggiunti `synchronous = NORMAL` (sicuro con WAL, più veloce di FULL), `cache_size = -32000` (32 MB di cache pagine), `temp_store = MEMORY` (tabelle temporanee in RAM)
 
 ### Aggiunto (sessione 2026-03-17)
+- **SSH — Client SSH web**: nuovo tab "SSH" con terminale xterm.js completo nel browser; host salvati con credenziali cifrate AES-256-GCM nel DB; supporto autenticazione password e chiave privata PEM/OpenSSH; sessioni multiple in sub-tab indipendenti con pulsante `+`; connessione diretta senza salvare l'host; WebSocket proxy backend (`ws` + `ssh2`) con verifica JWT e rate limit 10 connessioni/minuto per IP.
 - **Scanner — Eliminazione scansioni**: pulsante cestino su ogni scansione completata, abortita o in errore; modale di conferma prima della cancellazione. Nuovo endpoint `DELETE /api/scanner/:id` (blocca con HTTP 409 se la scansione è ancora in corso).
 
 ### Aggiunto

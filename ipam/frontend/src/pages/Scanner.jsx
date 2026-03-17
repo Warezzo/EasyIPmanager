@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "../lib/api";
-import { Icon, Modal, FormField, Button, Badge, PageHeader, EmptyState, inputStyle, Toast } from "../components/UI";
+import { Icon, Modal, FormField, Button, Badge, PageHeader, EmptyState, inputStyle, Toast, ConfirmModal } from "../components/UI";
 import { formatDate } from "../lib/utils";
 
 const STATUS_COLORS = { pending: "var(--text-muted)", running: "#10b981", done: "#22c55e", error: "#ef4444", aborted: "#f97316" };
@@ -18,6 +18,7 @@ export default function Scanner() {
   const [importing, setImporting] = useState({ subnet_id: "", hosts: [] });
   const [importLoading, setImportLoading] = useState(false);
   const [abortingIds, setAbortingIds] = useState(new Set());
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [modal, setModal] = useState(null); // "new" | "result" | "import"
   const [selectedScan, setSelectedScan] = useState(null);
   const [form, setForm] = useState({ target: "", subnet_id: "", scan_type: "ping" });
@@ -75,6 +76,15 @@ export default function Scanner() {
     try { await api.abortScan(id); await loadScans(); showToast("Scan interrotto", "warning"); }
     catch (e) { showToast(e.message, "error"); }
     finally { setAbortingIds((prev) => { const s = new Set(prev); s.delete(id); return s; }); }
+  };
+
+  const deleteScan = async (id) => {
+    try {
+      await api.deleteScan(id);
+      setScans((prev) => prev.filter((s) => s.id !== id));
+      showToast("Scansione eliminata");
+    } catch (e) { showToast(e.message, "error"); }
+    finally { setConfirmDeleteId(null); }
   };
 
   const openResult = async (scan) => {
@@ -153,6 +163,11 @@ export default function Scanner() {
                 {(scan.status === "error" || scan.status === "done") && !scan.result?.hosts?.length && (
                   <Button variant="ghost" onClick={() => openResult(scan)}>
                     <Icon d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" size={13} /> Log
+                  </Button>
+                )}
+                {scan.status !== "running" && (
+                  <Button variant="danger" onClick={() => setConfirmDeleteId(scan.id)}>
+                    <Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={13} />
                   </Button>
                 )}
               </div>
@@ -278,6 +293,16 @@ export default function Scanner() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {confirmDeleteId && (
+        <ConfirmModal
+          title="Elimina scansione"
+          message="Sei sicuro di voler eliminare questa scansione? L'operazione non è reversibile."
+          onConfirm={() => deleteScan(confirmDeleteId)}
+          onCancel={() => setConfirmDeleteId(null)}
+          danger
+        />
       )}
 
       {toast && <Toast {...toast} />}

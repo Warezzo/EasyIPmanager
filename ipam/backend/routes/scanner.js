@@ -120,6 +120,16 @@ router.post("/start", scanStartLimiter, (req, res) => {
   res.status(202).json({ id, status: "running", target });
 });
 
+// DELETE /api/scanner/:id - delete a scan record
+router.delete("/:id", (req, res) => {
+  const db = getDb();
+  const scan = db.prepare("SELECT id, status FROM scan_results WHERE id=?").get(req.params.id);
+  if (!scan) return res.status(404).json({ error: "Scansione non trovata" });
+  if (scan.status === "running") return res.status(409).json({ error: "Impossibile eliminare una scansione in corso. Interrompila prima." });
+  db.prepare("DELETE FROM scan_results WHERE id=?").run(req.params.id);
+  res.status(204).end();
+});
+
 // POST /api/scanner/:id/abort
 router.post("/:id/abort", (req, res) => {
   const entry = activeScans.get(req.params.id);

@@ -61,4 +61,5 @@ export const api = {
   startScan: (data) => request("POST", "/scanner/start", data),
   abortScan: (id) => request("POST", `/scanner/${id}/abort`),
   importHosts: (scanId, subnet_id, hosts) => request("POST", `/scanner/${scanId}/import`, { subnet_id, hosts }),
+  deleteScan: (id) => request("DELETE", `/scanner/${id}`),
 };

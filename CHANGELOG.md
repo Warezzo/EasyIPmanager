@@ -22,8 +22,10 @@ Il versionamento segue [Semantic Versioning](https://semver.org/lang/it/): `MAJO
 - **Scanner — output nmap nel DB troncato a 64 KB**: l'output grezzo di nmap (fino a 10 MB) veniva salvato per intero in SQLite; ora vengono conservati solo i primi 64 KB + 4 KB di stderr, sufficiente per il debug senza gonfiare il file
 - **DB — pragma SQLite di performance**: aggiunti `synchronous = NORMAL` (sicuro con WAL, più veloce di FULL), `cache_size = -32000` (32 MB di cache pagine), `temp_store = MEMORY` (tabelle temporanee in RAM)
 
-### Aggiunto
+### Aggiunto (sessione 2026-03-17)
 - **Scanner — Eliminazione scansioni**: pulsante cestino su ogni scansione completata, abortita o in errore; modale di conferma prima della cancellazione. Nuovo endpoint `DELETE /api/scanner/:id` (blocca con HTTP 409 se la scansione è ancora in corso).
+
+### Aggiunto
 - **IPAM — Selezione massiva IP**: checkbox per ogni riga della tabella, "seleziona tutti" nell'header, barra azione con contatore e pulsante *Elimina selezionati* con modale di conferma
 - **NetworkLogo unificato**: il logo SVG della schermata di login viene ora mostrato anche nella sidebar interna, estratto come componente condiviso in `UI.jsx` con prop `size`
 - **Backend — Validazione CIDR server-side**: `POST /api/subnets` e `PUT /api/subnets/:id` rifiutano con HTTP 400 valori non conformi (es. ottetti > 255, prefisso fuori range)

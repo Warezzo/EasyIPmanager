@@ -34,9 +34,7 @@ function SubnetCard({ subnet, used, total, onSelect, onEdit, onDelete }) {
   const pct = total > 0 ? Math.round((used / total) * 100) : 0;
   const statusColor = pct >= 90 ? "#ef4444" : pct >= 70 ? "#f97316" : pct >= 50 ? "#eab308" : "#22c55e";
   return (
-    <div onClick={() => onSelect(subnet)} style={{ background: "var(--bg-raised)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 20, cursor: "pointer", transition: "all 0.2s", position: "relative", overflow: "hidden" }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.boxShadow = "0 0 20px color-mix(in srgb, var(--accent) 13%, transparent)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-default)"; e.currentTarget.style.boxShadow = "none"; }}>
+    <div className="subnet-card" onClick={() => onSelect(subnet)} style={{ background: "var(--bg-raised)", border: "1px solid var(--border-default)", borderRadius: 12, padding: 20, cursor: "pointer", transition: "all 0.2s", position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", top: 0, right: 0, width: 60, height: 60, background: `${statusColor}11`, borderRadius: "0 12px 0 60px" }} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
         <div>
@@ -179,9 +177,8 @@ function ResizableTable({ entries, onEdit, onDelete, onBulkDelete }) {
             const isSelected = selectedIds.has(e.id);
             return (
               <div key={e.id}
-                style={{ display: "grid", gridTemplateColumns: templateCols, borderBottom: "1px solid var(--border-subtle)", alignItems: "center", background: isSelected ? "var(--accent-bg)" : "transparent" }}
-                onMouseEnter={(ev) => { if (!draggingKey) ev.currentTarget.style.background = "var(--bg-raised)"; }}
-                onMouseLeave={(ev) => { if (!draggingKey) ev.currentTarget.style.background = isSelected ? "var(--accent-bg)" : "transparent"; }}>
+                className={draggingKey ? undefined : "row-hover"}
+                style={{ display: "grid", gridTemplateColumns: templateCols, borderBottom: "1px solid var(--border-subtle)", alignItems: "center", background: isSelected ? "var(--accent-bg)" : "transparent" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <input type="checkbox" checked={isSelected} onChange={() => toggleOne(e.id)} onClick={(ev) => ev.stopPropagation()} style={cbStyle} />
                 </div>
@@ -201,8 +198,8 @@ function ResizableTable({ entries, onEdit, onDelete, onBulkDelete }) {
                   <Badge color={TYPE_COLORS[e.type] || "var(--text-muted)"}>{e.type}</Badge>
                 </div>
                 <div style={{ padding: "7px 12px", display: "flex", gap: 4 }}>
-                  <button onClick={() => onEdit(e)} style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 4, borderRadius: 4, transition: "color 0.1s" }} onMouseEnter={(ev) => ev.currentTarget.style.color = "var(--text-secondary)"} onMouseLeave={(ev) => ev.currentTarget.style.color = "var(--text-ghost)"}><Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" size={14} /></button>
-                  <button onClick={() => onDelete(e.id)} style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 4, borderRadius: 4, transition: "color 0.1s" }} onMouseEnter={(ev) => ev.currentTarget.style.color = "#ef4444"} onMouseLeave={(ev) => ev.currentTarget.style.color = "var(--text-ghost)"}><Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={14} /></button>
+                  <button className="icon-btn" onClick={() => onEdit(e)} style={{ padding: 4 }}><Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" size={14} /></button>
+                  <button className="icon-btn icon-btn-danger" onClick={() => onDelete(e.id)} style={{ padding: 4 }}><Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={14} /></button>
                 </div>
               </div>
             );

@@ -516,10 +516,8 @@ export default function SSH() {
             </div>
           )}
           {hosts.map(h => (
-            <div key={h.id}
-              style={c.hostItem(false)}
-              onMouseEnter={e => { e.currentTarget.querySelector(".host-actions").style.opacity = 1; }}
-              onMouseLeave={e => { e.currentTarget.querySelector(".host-actions").style.opacity = 0; }}>
+            <div key={h.id} className="host-item"
+              style={c.hostItem(false)}>
               <div style={{ minWidth: 0, flex: 1, cursor: "pointer" }} onClick={() => {
                 const id = nextId();
                 setSessions(prev => [...prev, { id, label: `${h.username}@${h.host}`, status: "idle", hostId: h.id }]);
@@ -533,16 +531,14 @@ export default function SSH() {
                 </div>
               </div>
               <div className="host-actions" style={{ ...c.hostActions, opacity: 0 }}>
-                <button onClick={e => { e.stopPropagation(); openEditModal(h); }}
-                  style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 3, borderRadius: 4, display: "flex" }}
+                <button className="icon-btn" onClick={e => { e.stopPropagation(); openEditModal(h); }}
+                  style={{ padding: 3, display: "flex" }}
                   title="Modifica">
                   <Icon d={ICON_EDIT} size={12} />
                 </button>
-                <button onClick={e => { e.stopPropagation(); setConfirmDelete(h); }}
-                  style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 3, borderRadius: 4, display: "flex" }}
-                  title="Elimina"
-                  onMouseEnter={e => { e.currentTarget.style.color = "#ef4444"; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = "var(--text-ghost)"; }}>
+                <button className="icon-btn icon-btn-danger" onClick={e => { e.stopPropagation(); setConfirmDelete(h); }}
+                  style={{ padding: 3, display: "flex" }}
+                  title="Elimina">
                   <Icon d={ICON_TRASH} size={12} />
                 </button>
               </div>
@@ -559,18 +555,14 @@ export default function SSH() {
             <button key={s.id} style={c.tab(activeTab === s.id)} onClick={() => setActiveTab(s.id)}>
               <span style={c.statusDot(s.status)} />
               <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis" }}>{s.label}</span>
-              <span
-                style={{ marginLeft: 2, color: "var(--text-ghost)", display: "flex", alignItems: "center", borderRadius: 3, padding: "1px 2px" }}
-                onClick={e => { e.stopPropagation(); closeSession(s.id); }}
-                onMouseEnter={e => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.background = "rgba(239,68,68,0.1)"; }}
-                onMouseLeave={e => { e.currentTarget.style.color = "var(--text-ghost)"; e.currentTarget.style.background = "transparent"; }}>
+              <span className="close-tab-btn"
+                style={{ marginLeft: 2, display: "flex", alignItems: "center" }}
+                onClick={e => { e.stopPropagation(); closeSession(s.id); }}>
                 <Icon d={ICON_CLOSE} size={10} />
               </span>
             </button>
           ))}
-          <button style={c.tabNewBtn} title="Nuova sessione" onClick={openBlankSession}
-            onMouseEnter={e => { e.currentTarget.style.color = "var(--accent)"; }}
-            onMouseLeave={e => { e.currentTarget.style.color = "var(--text-ghost)"; }}>
+          <button className="tab-new-btn" style={c.tabNewBtn} title="Nuova sessione" onClick={openBlankSession}>
             +
           </button>
         </div>
@@ -594,12 +586,6 @@ export default function SSH() {
       {(modal === "add" || modal === "edit") && <HostModal />}
       {confirmDelete && <ConfirmDeleteModal host={confirmDelete} />}
 
-      {/* xterm CSS */}
-      <style>{`
-        @import url('https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css');
-        .xterm { height: 100%; }
-        .xterm-viewport { overflow-y: hidden !important; }
-      `}</style>
     </div>
   );
 }

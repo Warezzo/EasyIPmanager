@@ -10,6 +10,21 @@ Il versionamento segue [Semantic Versioning](https://semver.org/lang/it/): `MAJO
 
 ## [Unreleased] — v1.2.0
 
+### Ottimizzazioni (sessione 2026-03-18)
+
+**Backend**
+- **[ALTO] crypto.js — cache chiave scrypt**: `scryptSync` calcolato una sola volta al primo utilizzo (~80-100 ms) invece di rieseguirlo ad ogni `encrypt()`/`decrypt()`
+- **[ALTO] scanner.js — Buffer chunks**: sostituita la concatenazione `string +=` (O(n²) GC pressure) con accumulo di `Buffer` chunks; `toString()` una volta sola nel `close` event
+- **[ALTO] dns.js — elimina N+1 in generate-ptr**: il loop con una `SELECT` per ogni IP è sostituito da una query + `Set` in memoria + transazione SQLite per gli insert
+- **[MEDIO] subnets.js + dns.js — elimina SELECT ridondanti post-INSERT/PUT**: oggetti di risposta costruiti dai dati già in memoria invece di ri-leggere dal DB
+- **[MEDIO] db.js — indice su `scan_results.created_at`**: copre `ORDER BY created_at DESC LIMIT 50` nella lista scan
+- **[BASSO] dns.js — `VALID_TYPES` come `Set`**: lookup O(1) invece di `Array.includes`
+
+**Frontend**
+- **[BUG] Scanner.jsx — fix polling interval**: l'`useEffect` con `[scans, loadScans]` distruggeva e ricreava l'intervallo ad ogni fetch (ogni 3 s); separato in due effect con dipendenze corrette
+- **[MEDIO] `src/index.css`**: stili globali spostati dal tag `<style>` runtime di `Layout.jsx`; CSS xterm importato dal pacchetto npm locale invece del CDN (`SSH.jsx`); entrambi caricati staticamente da `main.jsx`
+- **[MEDIO] CSS hover classes**: eliminati ~15 handler `onMouseEnter`/`onMouseLeave` con manipolazione DOM diretta (incluso un `querySelector` in `SSH.jsx`) in favore di classi CSS in `index.css`; interessa `IPAM.jsx`, `DNS.jsx`, `SSH.jsx`
+
 ### Sicurezza (sessione 2026-03-18 — hardening completo)
 - **[CRITICO] Separazione chiavi crittografiche**: `SSH_ENCRYPTION_KEY` è ora **obbligatoriamente separata** da `JWT_SECRET`. Nuovo modulo `lib/config.js` centralizza la gestione dei secrets; in produzione entrambe le variabili sono richieste e devono essere diverse
 - **[CRITICO] Eliminazione fallback hardcoded**: `crypto.js` non fallback più a `JWT_SECRET` né a `"dev-insecure-default"`; `sshWs.js` non ha più il proprio `SECRET` duplicato. Un unico punto di verità in `lib/config.js`

@@ -1,0 +1,69 @@
+/* ── Font ─────────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+
+/* ── Reset ───────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+a { text-decoration: none; }
+
+/* ── Form focus ring ─────────────────────────────────────────────────────── */
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent) !important;
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+select option { background: var(--bg-overlay); color: var(--text-primary); }
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--bg-overlay); border-radius: 3px; }
+
+/* ── xterm terminal overrides ────────────────────────────────────────────── */
+.xterm { height: 100%; }
+.xterm-viewport { overflow-y: hidden !important; }
+
+/* ── Hover utilities (replaces onMouseEnter/Leave DOM manipulation) ───────── */
+
+/* Generic row hover — tables in IPAM and DNS */
+.row-hover:hover { background: var(--bg-raised) !important; }
+
+/* Subnet cards */
+.subnet-card:hover {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 13%, transparent) !important;
+}
+
+/* Icon action buttons */
+.icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: var(--text-ghost);
+  transition: color 0.1s;
+}
+.icon-btn:hover { color: var(--text-secondary); }
+.icon-btn-danger:hover { color: #ef4444; }
+
+/* SSH sidebar host items — reveal action buttons on hover */
+.host-actions { opacity: 0; transition: opacity 0.1s; }
+.host-item:hover .host-actions { opacity: 1; }
+
+/* SSH new session button */
+.tab-new-btn:hover { color: var(--accent) !important; }
+
+/* SSH tab close button */
+.close-tab-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--text-ghost);
+  transition: color 0.1s, background 0.1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 3px;
+}
+.close-tab-btn:hover { color: #ef4444; background: rgba(239, 68, 68, 0.12); }

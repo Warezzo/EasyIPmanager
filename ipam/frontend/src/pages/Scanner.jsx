@@ -38,26 +38,27 @@ export default function Scanner() {
     }).catch((e) => { showToast(e.message, "error"); setLoading(false); });
   }, []);
 
-  // Poll running scans
+  // Stop polling when no scans are running anymore
   useEffect(() => {
     const running = scans.some((s) => s.status === "running");
-    if (running) {
-      if (!pollRef.current) {
-        pollRef.current = setInterval(loadScans, 3000);
-      }
-    } else {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+    if (!running && pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
     }
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [scans, loadScans]);
+  }, [scans]);
+
+  // Start polling when a running scan is detected; clean up only on unmount or
+  // when loadScans identity changes. Keeping this separate from the scans effect
+  // prevents the interval from being destroyed and recreated on every poll result.
+  useEffect(() => {
+    const running = scans.some((s) => s.status === "running");
+    if (running && !pollRef.current) {
+      pollRef.current = setInterval(loadScans, 3000);
+    }
+    return () => { clearInterval(pollRef.current); pollRef.current = null; };
+  // loadScans is stable (useCallback with []) — intentionally not adding scans
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadScans]);
 
   const startScan = async () => {
     if (!form.target.trim()) { showToast("Inserisci un target", "error"); return; }

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth.jsx";
 import { useTheme } from "../hooks/useTheme.jsx";
 import { Icon, NetworkLogo } from "./UI.jsx";
@@ -22,6 +22,11 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const [themeOpen, setThemeOpen] = useState(false);
+  const [appVersion, setAppVersion] = useState(null);
+
+  useEffect(() => {
+    fetch("/api/health").then(r => r.json()).then(d => setAppVersion(d.version)).catch(() => {});
+  }, []);
 
   const handleLogout = () => { logout(); navigate("/login"); };
   const currentThemeOption = THEME_OPTIONS.find((o) => o.value === theme) || THEME_OPTIONS[0];
@@ -103,7 +108,10 @@ export default function Layout({ children }) {
             )}
           </div>
 
-          {/* User + logout */}
+          {/* Version + User + logout */}
+          {appVersion && (
+            <div style={{ fontSize: 9, color: "var(--text-ghost)", letterSpacing: "0.06em", textAlign: "center" }}>v{appVersion}</div>
+          )}
           <div style={{ fontSize: 11, color: "var(--text-ghost)" }}>{user}</div>
           <button onClick={handleLogout}
             style={{ background: "none", border: "1px solid var(--border-default)", color: "var(--text-faint)", cursor: "pointer", padding: "6px 10px", borderRadius: 6, fontSize: 11, fontFamily: "inherit", width: "100%", transition: "all 0.15s" }}

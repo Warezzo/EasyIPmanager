@@ -24,6 +24,7 @@ Il versionamento segue [Semantic Versioning](https://semver.org/lang/it/): `MAJO
 
 ### Aggiunto (sessione 2026-03-17)
 - **SSH — Client SSH web**: nuovo tab "SSH" con terminale xterm.js completo nel browser; host salvati con credenziali cifrate AES-256-GCM nel DB; supporto autenticazione password e chiave privata PEM/OpenSSH; sessioni multiple in sub-tab indipendenti con pulsante `+`; connessione diretta senza salvare l'host; WebSocket proxy backend (`ws` + `ssh2`) con verifica JWT e rate limit 10 connessioni/minuto per IP.
+- **UI — Versione in sidebar**: il numero di versione è mostrato in basso a sinistra nella sidebar; letto dinamicamente da `GET /api/health` che a sua volta legge `backend/package.json`; aggiornare la versione nel changelog significa aggiornare solo `package.json` e l'app la riflette automaticamente.
 - **Scanner — Eliminazione scansioni**: pulsante cestino su ogni scansione completata, abortita o in errore; modale di conferma prima della cancellazione. Nuovo endpoint `DELETE /api/scanner/:id` (blocca con HTTP 409 se la scansione è ancora in corso).
 
 ### Aggiunto

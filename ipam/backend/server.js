@@ -4,6 +4,7 @@ const path = require("path");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 
+const { version } = require("./package.json");
 const authRoutes = require("./routes/auth");
 const subnetRoutes = require("./routes/subnets");
 const dnsRoutes = require("./routes/dns");
@@ -59,7 +60,7 @@ app.use("/api/scanner", scannerRoutes);
 app.use("/api/ssh", sshRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
-app.get("/api/health", (req, res) => res.json({ ok: true, version: "1.1.0" }));
+app.get("/api/health", (req, res) => res.json({ ok: true, version }));
 
 // ── Serve React build ─────────────────────────────────────────────────────────
 const STATIC_DIR = path.join(__dirname, "../frontend/dist");

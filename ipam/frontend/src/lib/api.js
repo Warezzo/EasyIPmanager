@@ -79,4 +79,7 @@ export const api = {
   createSshHost: (data) => request("POST", "/ssh/hosts", data),
   updateSshHost: (id, data) => request("PUT", `/ssh/hosts/${id}`, data),
   deleteSshHost: (id) => request("DELETE", `/ssh/hosts/${id}`),
+
+  // WebSocket auth (one-time ticket, replaces JWT in URL)
+  getWsTicket: () => request("POST", "/auth/ws-ticket"),
 };

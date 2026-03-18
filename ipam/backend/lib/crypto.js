@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { SSH_ENCRYPTION_KEY } = require("./config");
 
 const ALGORITHM = "aes-256-gcm";
 const KEY_LEN   = 32;
@@ -7,11 +8,7 @@ const TAG_LEN   = 16;
 const SALT      = "ipam-ssh-v1";
 
 function getKey() {
-  const secret =
-    process.env.SSH_ENCRYPTION_KEY ||
-    process.env.JWT_SECRET         ||
-    "dev-insecure-default";
-  return crypto.scryptSync(secret, SALT, KEY_LEN);
+  return crypto.scryptSync(SSH_ENCRYPTION_KEY, SALT, KEY_LEN);
 }
 
 /**

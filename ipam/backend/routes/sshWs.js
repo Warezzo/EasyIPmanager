@@ -1,10 +1,9 @@
 const WebSocket = require("ws");
-const jwt       = require("jsonwebtoken");
 const { Client: SshClient } = require("ssh2");
-const { getHost, getDecryptedSecret } = require("./ssh");
+const { getHost } = require("./ssh");
 const { decrypt } = require("../lib/crypto");
-
-const SECRET = process.env.JWT_SECRET || "dev_secret_UNSAFE_do_not_use_in_production";
+const { validateTicket } = require("../lib/wsTickets");
+const { isValidSshHost } = require("../lib/validateHost");
 
 // ── Rate limit (in-memory: max 10 SSH connects / IP / minute) ────────────────
 const connectAttempts = new Map(); // ip → { count, resetAt }
@@ -20,11 +19,17 @@ function checkRateLimit(ip) {
   return entry.count <= 10;
 }
 
-// ── Validate hostname/IP to prevent SSRF-style abuse ─────────────────────────
-const VALID_HOST = /^[a-zA-Z0-9._-]+$/;
-
 function send(ws, obj) {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+/**
+ * Extract real client IP, respecting X-Forwarded-For when behind a proxy.
+ */
+function getClientIp(req) {
+  const xff = req.headers["x-forwarded-for"];
+  if (xff) return xff.split(",")[0].trim();
+  return req.headers["x-real-ip"] || req.socket.remoteAddress || "unknown";
 }
 
 /**
@@ -38,16 +43,15 @@ function attachSshWs(httpServer) {
     const url = new URL(req.url, "http://localhost");
     if (url.pathname !== "/ws/ssh") return; // not our path, ignore
 
-    // ── JWT auth from query param ─────────────────────────────────────────────
-    const token = url.searchParams.get("token");
-    if (!token) {
+    // ── Auth via one-time ticket (replaces JWT in query param) ──────────────
+    const ticket = url.searchParams.get("ticket");
+    if (!ticket) {
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();
       return;
     }
-    try {
-      jwt.verify(token, SECRET);
-    } catch {
+    const userId = validateTicket(ticket);
+    if (!userId) {
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();
       return;
@@ -59,7 +63,7 @@ function attachSshWs(httpServer) {
   });
 
   wss.on("connection", (ws, req) => {
-    const ip = req.socket.remoteAddress || "unknown";
+    const ip = getClientIp(req);
 
     let sshConn      = null;
     let isConnecting = false;
@@ -84,6 +88,11 @@ function attachSshWs(httpServer) {
           ws.close();
           return;
         }
+        if (!isValidSshHost(host.host)) {
+          send(ws, { type: "error", message: "Indirizzo host non consentito" });
+          ws.close();
+          return;
+        }
         let secret;
         try { secret = decrypt(host.encrypted_secret); } catch (e) {
           console.error(`[SSH] Decryption failed for host ${host.id} — key may have changed: ${e.message}`);
@@ -103,7 +112,7 @@ function attachSshWs(httpServer) {
           return;
         }
         const { host, port, username, authType, secret } = msg;
-        if (!host || !VALID_HOST.test(host) || !username || !secret) {
+        if (!host || !isValidSshHost(host) || !username || !secret) {
           send(ws, { type: "error", message: "Parametri di connessione non validi" });
           return;
         }
@@ -122,10 +131,12 @@ function attachSshWs(httpServer) {
         return;
       }
 
-      // ── resize ────────────────────────────────────────────────────────────
+      // ── resize (with range validation) ────────────────────────────────────
       if (msg.type === "resize") {
-        cols = parseInt(msg.cols, 10) || 80;
-        rows = parseInt(msg.rows, 10) || 24;
+        const c = parseInt(msg.cols, 10) || 80;
+        const r = parseInt(msg.rows, 10) || 24;
+        cols = Math.max(1, Math.min(c, 512));
+        rows = Math.max(1, Math.min(r, 256));
         if (sshStream) sshStream.setWindow(rows, cols, 0, 0);
         return;
       }
@@ -159,9 +170,10 @@ function attachSshWs(httpServer) {
       }
 
       conn.on("ready", () => {
+        isConnecting = false;
         conn.shell({ term: "xterm-256color", cols, rows }, (err, stream) => {
           if (err) {
-            send(ws, { type: "error", message: `Shell error: ${err.message}` });
+            send(ws, { type: "error", message: "Impossibile aprire la shell SSH" });
             ws.close();
             return;
           }
@@ -183,9 +195,9 @@ function attachSshWs(httpServer) {
 
       conn.on("error", (err) => {
         isConnecting = false;
-        // Never log the secret — only log host/user info
+        // Log full error server-side — never expose details to client
         console.error(`SSH connection error [${username}@${host}:${port}]: ${err.message}`);
-        send(ws, { type: "error", message: err.message });
+        send(ws, { type: "error", message: "Connessione SSH fallita" });
         ws.close();
       });
 

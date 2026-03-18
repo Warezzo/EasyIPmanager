@@ -143,13 +143,21 @@ export default function SSH() {
   }, [isDark]);
 
   // ── SSH connect ─────────────────────────────────────────────────────────────
-  function connectSession(id, params) {
+  async function connectSession(id, params) {
     // params: { hostId } or { host, port, username, authType, secret }
     updateSessionStatus(id, "connecting");
 
-    const token = localStorage.getItem("ipam_token");
+    // Get a one-time ticket instead of sending JWT in the URL
+    let ticket;
+    try {
+      const res = await api.getWsTicket();
+      ticket = res.ticket;
+    } catch (e) {
+      updateSessionStatus(id, "error");
+      return;
+    }
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const wsUrl = `${proto}://${window.location.host}/ws/ssh?token=${encodeURIComponent(token)}`;
+    const wsUrl = `${proto}://${window.location.host}/ws/ssh?ticket=${encodeURIComponent(ticket)}`;
     const ws = new WebSocket(wsUrl);
     wsRefs.current[id] = ws;
 

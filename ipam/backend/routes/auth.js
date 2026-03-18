@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
 const { signToken, requireAuth } = require("../middleware/auth");
+const { createTicket } = require("../lib/wsTickets");
 
 const router = express.Router();
 
@@ -20,7 +21,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 if (!ADMIN_PASSWORD) {
   console.warn("WARNING: ADMIN_PASSWORD is not set — login will accept an empty password");
 }
-const ADMIN_HASH = bcrypt.hashSync(ADMIN_PASSWORD, 10);
+const ADMIN_HASH = bcrypt.hashSync(ADMIN_PASSWORD, 12);
 
 // POST /api/auth/login
 router.post("/login", loginLimiter, async (req, res) => {
@@ -56,6 +57,13 @@ router.post("/login", loginLimiter, async (req, res) => {
 // GET /api/auth/me
 router.get("/me", requireAuth, (req, res) => {
   res.json({ user: req.user.user });
+});
+
+// POST /api/auth/ws-ticket — short-lived one-time ticket for WebSocket auth
+// Replaces JWT in query params (which would leak in proxy logs)
+router.post("/ws-ticket", requireAuth, (req, res) => {
+  const ticket = createTicket(req.user.user);
+  res.json({ ticket });
 });
 
 module.exports = router;

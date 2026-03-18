@@ -10,6 +10,19 @@ Il versionamento segue [Semantic Versioning](https://semver.org/lang/it/): `MAJO
 
 ## [Unreleased] — v1.2.0
 
+### Sicurezza (sessione 2026-03-18 — hardening completo)
+- **[CRITICO] Separazione chiavi crittografiche**: `SSH_ENCRYPTION_KEY` è ora **obbligatoriamente separata** da `JWT_SECRET`. Nuovo modulo `lib/config.js` centralizza la gestione dei secrets; in produzione entrambe le variabili sono richieste e devono essere diverse
+- **[CRITICO] Eliminazione fallback hardcoded**: `crypto.js` non fallback più a `JWT_SECRET` né a `"dev-insecure-default"`; `sshWs.js` non ha più il proprio `SECRET` duplicato. Un unico punto di verità in `lib/config.js`
+- **[ALTO] Protezione SSRF**: nuovo modulo `lib/validateHost.js` blocca `localhost`, `127.x.x.x`, `0.0.0.0`, `169.254.x.x` (AWS/GCP metadata), `::1`, `::` sia in `ssh.js` che in `sshWs.js`. Reti private (10.x, 172.16.x, 192.168.x) restano consentite (è un IPAM)
+- **[ALTO] WebSocket ticket monouso**: nuovo modulo `lib/wsTickets.js` + endpoint `POST /api/auth/ws-ticket`. Il JWT **non transita più nell'URL** del WebSocket (era esposto nei log di proxy/nginx). Il ticket è crittograficamente casuale (32 byte), monouso e scade in 30 secondi
+- **[MEDIO] JWT hardening**: algoritmo `HS256` esplicito in sign e verify (previene algorithm confusion), expiry ridotta da 12h a 4h
+- **[MEDIO] Bcrypt rounds**: aumentati da 10 a 12 (~4x più lento da bruteforce)
+- **[MEDIO] Security headers**: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, `HSTS` (solo in produzione)
+- **[MEDIO] Trust proxy**: `app.set("trust proxy", 1)` per rate-limit corretto dietro nginx/traefik; `sshWs.js` ora usa `X-Forwarded-For` / `X-Real-IP` per IP reale del client
+- **[BASSO] Validazione cols/rows SSH**: limitate a range 1–512 e 1–256 rispettivamente (previene DoS via valori assurdi)
+- **[BASSO] Errori SSH generici al client**: messaggi come "Permission denied (publickey)" non raggiungono più il browser; solo `"Connessione SSH fallita"` (log completo resta server-side)
+- **Env check produzione rafforzato**: `server.js` ora verifica che `SSH_ENCRYPTION_KEY` sia presente E diversa da `JWT_SECRET`
+
 ### Corretto (sessione 2026-03-18 — analisi bug)
 - **SSH — Race condition connessione duplicata**: due messaggi `connect` in rapida successione potevano aprire due sessioni SSH parallele sulla stessa connessione WebSocket; aggiunto flag `isConnecting` con reset in `conn.on("error")` e `conn.on("close")`
 - **SSH — Errore decifrazione non loggato lato server**: il blocco catch del `decrypt` non produceva log; aggiunto `console.error` con host ID per debug operativo (secret mai esposto)

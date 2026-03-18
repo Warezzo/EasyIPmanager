@@ -14,17 +14,43 @@ const { attachSshWs } = require("./routes/sshWs");
 const { closeDb } = require("./db");
 
 // ── Env validation ─────────────────────────────────────────────────────────────
-if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
-  console.error("FATAL: JWT_SECRET is required in production. Set it in your .env file.");
-  process.exit(1);
-}
-if (!process.env.ADMIN_PASSWORD && process.env.NODE_ENV === "production") {
-  console.error("FATAL: ADMIN_PASSWORD is required in production. Set it in your .env file.");
-  process.exit(1);
+if (process.env.NODE_ENV === "production") {
+  if (!process.env.JWT_SECRET) {
+    console.error("FATAL: JWT_SECRET is required in production. Set it in your .env file.");
+    process.exit(1);
+  }
+  if (!process.env.ADMIN_PASSWORD) {
+    console.error("FATAL: ADMIN_PASSWORD is required in production. Set it in your .env file.");
+    process.exit(1);
+  }
+  if (!process.env.SSH_ENCRYPTION_KEY) {
+    console.error("FATAL: SSH_ENCRYPTION_KEY is required in production (must differ from JWT_SECRET).");
+    process.exit(1);
+  }
+  if (process.env.SSH_ENCRYPTION_KEY === process.env.JWT_SECRET) {
+    console.error("FATAL: SSH_ENCRYPTION_KEY must be different from JWT_SECRET (key separation).");
+    process.exit(1);
+  }
 }
 
 const app = express();
 const PORT = process.env.PORT || 5050;
+
+// ── Trust proxy (needed for correct rate-limit IP behind nginx/traefik) ──────
+app.set("trust proxy", 1);
+
+// ── Security headers ─────────────────────────────────────────────────────────
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "0"); // modern browsers use CSP, not this
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
 
 // ── CORS — applied only to /api routes ────────────────────────────────────────
 // Do NOT apply CORS globally: Vite builds scripts with crossorigin attribute,

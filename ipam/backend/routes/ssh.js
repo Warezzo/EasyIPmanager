@@ -4,15 +4,14 @@ const { randomUUID } = require("crypto");
 const { getDb }      = require("../db");
 const { requireAuth } = require("../middleware/auth");
 const { encrypt, decrypt } = require("../lib/crypto");
-
-const VALID_HOST = /^[a-zA-Z0-9._-]+$/;
+const { isValidSshHost } = require("../lib/validateHost");
 
 function validateHostPayload(body, requireSecret = true) {
   const { name, host, port, username, auth_type, secret } = body;
   if (!name || typeof name !== "string" || !name.trim())
     return "name is required";
-  if (!host || !VALID_HOST.test(host))
-    return "host must be a valid hostname or IP";
+  if (!host || !isValidSshHost(host))
+    return "host must be a valid hostname or IP (localhost and link-local addresses are blocked)";
   const p = parseInt(port, 10);
   if (isNaN(p) || p < 1 || p > 65535)
     return "port must be 1–65535";
@@ -79,9 +78,6 @@ router.delete("/hosts/:id", requireAuth, (req, res) => {
   db.prepare("DELETE FROM ssh_hosts WHERE id=?").run(req.params.id);
   res.status(204).end();
 });
-
-// POST /api/ssh/hosts/:id/secret — restituisce il secret decifrato (usato dal WS handler lato server, non esposto ai client REST normalmente)
-// Invece di esporre questo endpoint, il WS handler chiama direttamente il DB + decrypt. Non serve route pubblica.
 
 module.exports = router;
 module.exports.getDecryptedSecret = function(id) {

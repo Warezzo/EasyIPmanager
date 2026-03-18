@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   ipam:
-    build: .
+    image: ghcr.io/warezzo/easyipmanager:latest
     container_name: ipam
     restart: unless-stopped
     ports:

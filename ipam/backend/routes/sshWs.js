@@ -61,8 +61,9 @@ function attachSshWs(httpServer) {
   wss.on("connection", (ws, req) => {
     const ip = req.socket.remoteAddress || "unknown";
 
-    let sshConn   = null;
-    let sshStream = null;
+    let sshConn      = null;
+    let isConnecting = false;
+    let sshStream    = null;
     let cols = 80;
     let rows = 24;
 
@@ -84,8 +85,9 @@ function attachSshWs(httpServer) {
           return;
         }
         let secret;
-        try { secret = decrypt(host.encrypted_secret); } catch {
-          send(ws, { type: "error", message: "Errore nella decifrazione delle credenziali" });
+        try { secret = decrypt(host.encrypted_secret); } catch (e) {
+          console.error(`[SSH] Decryption failed for host ${host.id} — key may have changed: ${e.message}`);
+          send(ws, { type: "error", message: "Credenziali non decifrabili — la chiave di cifratura potrebbe essere cambiata" });
           ws.close();
           return;
         }
@@ -136,7 +138,8 @@ function attachSshWs(httpServer) {
 
     // ── SSH connection helper ─────────────────────────────────────────────────
     function openSshSession({ host, port, username, authType, secret }) {
-      if (sshConn) return; // already connecting
+      if (sshConn || isConnecting) return; // prevent duplicate connections
+      isConnecting = true;
 
       const conn = new SshClient();
       sshConn = conn;
@@ -179,6 +182,7 @@ function attachSshWs(httpServer) {
       });
 
       conn.on("error", (err) => {
+        isConnecting = false;
         // Never log the secret — only log host/user info
         console.error(`SSH connection error [${username}@${host}:${port}]: ${err.message}`);
         send(ws, { type: "error", message: err.message });
@@ -186,6 +190,8 @@ function attachSshWs(httpServer) {
       });
 
       conn.on("close", () => {
+        isConnecting = false;
+        sshConn = null;
         send(ws, { type: "closed" });
         if (ws.readyState === WebSocket.OPEN) ws.close();
       });

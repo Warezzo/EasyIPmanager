@@ -66,6 +66,8 @@ router.post("/start", scanStartLimiter, (req, res) => {
   const killTimer = setTimeout(() => {
     if (activeScans.has(id)) {
       proc.kill("SIGKILL");
+      // Safety: if close event never fires after SIGKILL, clean up the map anyway
+      setTimeout(() => activeScans.delete(id), 5_000);
     }
   }, 10 * 60 * 1000);
 
@@ -98,7 +100,6 @@ router.post("/start", scanStartLimiter, (req, res) => {
       clearTimeout(entry.killTimer);
       activeScans.delete(id);
     }
-    const db2 = getDb();
     try {
       const parsed = parseNmapOutput(stdout);
       // Keep at most 64 KB of raw output in the DB — enough for debugging,
@@ -109,10 +110,10 @@ router.post("/start", scanStartLimiter, (req, res) => {
         : stdout;
       const result = { hosts: parsed, raw: rawDb, stderr: stderr.slice(0, 4096) };
       if (bufOverflow) result.warning = "Output truncated at 10 MB — scan too large";
-      db2.prepare("UPDATE scan_results SET status=?,finished_at=?,result=? WHERE id=?")
+      db.prepare("UPDATE scan_results SET status=?,finished_at=?,result=? WHERE id=?")
         .run(code === 0 ? "done" : "error", new Date().toISOString(), JSON.stringify(result), id);
     } catch (e) {
-      db2.prepare("UPDATE scan_results SET status='error',finished_at=?,result=? WHERE id=?")
+      db.prepare("UPDATE scan_results SET status='error',finished_at=?,result=? WHERE id=?")
         .run(new Date().toISOString(), JSON.stringify({ error: e.message, raw: stdout, stderr }), id);
     }
   });

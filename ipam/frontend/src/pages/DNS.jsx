@@ -41,6 +41,7 @@ export default function DNS() {
   const save = async () => {
     const errs = {};
     if (!form.zone.trim()) errs.zone = "Obbligatorio";
+    else if (!/^[a-z0-9.-]+$/i.test(form.zone) || form.zone.startsWith(".") || form.zone.endsWith(".")) errs.zone = "Formato non valido (es. lab.local)";
     if (!form.name.trim()) errs.name = "Obbligatorio";
     if (!form.value.trim()) errs.value = "Obbligatorio";
     if (Object.keys(errs).length) { setErrors(errs); return; }
@@ -69,11 +70,14 @@ export default function DNS() {
     });
   };
 
-  const filtered = useMemo(() => records.filter((r) => {
-    if (selectedZone !== "all" && r.zone !== selectedZone) return false;
-    if (search) return r.name.includes(search) || r.value.includes(search) || r.zone.includes(search);
-    return true;
-  }), [records, selectedZone, search]);
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return records.filter((r) => {
+      if (selectedZone !== "all" && r.zone !== selectedZone) return false;
+      if (q) return r.name.toLowerCase().includes(q) || r.value.toLowerCase().includes(q) || r.zone.toLowerCase().includes(q);
+      return true;
+    });
+  }, [records, selectedZone, search]);
 
   const grouped = useMemo(() =>
     filtered.reduce((acc, r) => { (acc[r.zone] = acc[r.zone] || []).push(r); return acc; }, {}),

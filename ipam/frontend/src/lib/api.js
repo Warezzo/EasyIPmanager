@@ -6,14 +6,25 @@ function getToken() {
 
 async function request(method, path, body) {
   const token = getToken();
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error("Timeout: il server non risponde");
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
   if (res.status === 401) {
     localStorage.removeItem("ipam_token");
     window.location.href = "/login";

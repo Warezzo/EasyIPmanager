@@ -3,6 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { api } from "../lib/api.js";
 import { useTheme } from "../hooks/useTheme.jsx";
+import { useAuth } from "../hooks/useAuth.jsx";
 import { Icon } from "../components/UI.jsx";
 
 // ── xterm theme tokens ────────────────────────────────────────────────────────
@@ -30,6 +31,23 @@ const EMPTY_FORM = { name: "", host: "", port: "22", username: "", auth_type: "p
 export default function SSH() {
   const { resolved } = useTheme();
   const isDark = resolved !== "light";
+  const { user } = useAuth();
+
+  // Close all WebSocket sessions when the user logs out
+  useEffect(() => {
+    if (!user) {
+      Object.keys(wsRefs.current).forEach(id => {
+        try { wsRefs.current[id]?.close(); } catch {}
+        delete wsRefs.current[id];
+      });
+      Object.keys(termRefs.current).forEach(id => {
+        try { termRefs.current[id]?.term?.dispose(); } catch {}
+        delete termRefs.current[id];
+      });
+      setSessions([]);
+      setActiveTab(null);
+    }
+  }, [user]);
 
   const [hosts, setHosts]       = useState([]);
   const [sessions, setSessions] = useState([]);    // [{ id, label, status, hostId? }]

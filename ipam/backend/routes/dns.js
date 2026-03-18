@@ -72,6 +72,8 @@ router.delete("/:id", (req, res) => {
   res.status(204).end();
 });
 
+const VALID_DNS_ZONE = /^[a-z0-9.-]+$/i;
+
 // POST /api/dns/generate-ptr/:subnetId  — auto-generate PTR records from IP entries
 router.post("/generate-ptr/:subnetId", (req, res) => {
   const db = getDb();
@@ -79,6 +81,9 @@ router.post("/generate-ptr/:subnetId", (req, res) => {
   if (!subnet) return res.status(404).json({ error: "Subnet not found" });
   const entries = db.prepare("SELECT * FROM ip_entries WHERE subnet_id=?").all(req.params.subnetId);
   const zone = req.body.zone || "in-addr.arpa";
+  if (!VALID_DNS_ZONE.test(zone) || zone.startsWith(".") || zone.endsWith(".")) {
+    return res.status(400).json({ error: "Formato zona DNS non valido" });
+  }
   let created = 0;
   for (const entry of entries) {
     const reversed = entry.ip.split(".").reverse().join(".");

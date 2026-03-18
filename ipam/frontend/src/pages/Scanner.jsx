@@ -186,7 +186,11 @@ export default function Scanner() {
           </FormField>
 
           <FormField label="Subnet IPAM (opzionale)">
-            <select style={inputStyle} value={form.subnet_id} onChange={(e) => setForm({ ...form, subnet_id: e.target.value, target: e.target.value ? subnets.find(s => s.id === e.target.value)?.cidr || form.target : form.target })}>
+            <select style={inputStyle} value={form.subnet_id} onChange={(e) => {
+              const subnetId = e.target.value;
+              const cidr = subnetId ? subnets.find(s => s.id === subnetId)?.cidr : undefined;
+              setForm({ ...form, subnet_id: subnetId, ...(cidr ? { target: cidr } : {}) });
+            }}>
               <option value="">— Nessuna associazione —</option>
               {subnets.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.cidr})</option>)}
             </select>

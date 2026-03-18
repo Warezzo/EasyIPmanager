@@ -10,6 +10,19 @@ Il versionamento segue [Semantic Versioning](https://semver.org/lang/it/): `MAJO
 
 ## [Unreleased] — v1.2.0
 
+### Corretto (sessione 2026-03-18 — analisi bug)
+- **SSH — Race condition connessione duplicata**: due messaggi `connect` in rapida successione potevano aprire due sessioni SSH parallele sulla stessa connessione WebSocket; aggiunto flag `isConnecting` con reset in `conn.on("error")` e `conn.on("close")`
+- **SSH — Errore decifrazione non loggato lato server**: il blocco catch del `decrypt` non produceva log; aggiunto `console.error` con host ID per debug operativo (secret mai esposto)
+- **SSH — WebSocket non chiuso al logout**: le sessioni SSH restavano aperte se l'utente effettuava il logout; aggiunto `useEffect` su `user` in `SSH.jsx` che chiude tutti i WebSocket e smonta i terminali xterm
+- **Scanner — Handle DB ridondante**: `proc.on("close")` creava un secondo handle `db2 = getDb()` inutile (singleton); sostituito con il `db` già in scope nel handler della route
+- **Scanner — killTimer non rimuove da `activeScans` se `close` non arriva**: dopo `SIGKILL`, se l'evento `close` del processo non si presenta (raro ma possibile), la voce rimaneva in mappa indefinitamente; aggiunto cleanup di sicurezza dopo 5s
+- **DNS — Ricerca record case-sensitive**: cercare "MAIL" non trovava "mail"; la ricerca ora converte sia query che campi in minuscolo prima del confronto
+- **DNS — Zona non validata nel form frontend**: il campo zona accettava qualsiasi stringa; aggiunta validazione regex `/^[a-z0-9.-]+$/i` con controllo su punto iniziale/finale
+- **DNS — Zona non validata in `generate-ptr` backend**: il parametro `zone` dal body non era controllato; aggiunto check regex prima dell'inserimento
+- **CIDR — Prefisso `/0` accettato**: `isValidCIDR` accettava `0.0.0.0/0`; limite inferiore cambiato da 0 a 1
+- **API — Nessun timeout sulle richieste fetch**: se il backend non risponde, il client restava appeso indefinitamente; aggiunto `AbortController` con timeout a 15 secondi su tutte le chiamate REST
+- **Scanner — Deselezionare subnet sovrascriveva il target manuale**: se l'utente selezionava una subnet (auto-fill CIDR) e poi deselezionava, il target rimaneva il CIDR precedente; ora la deselezione lascia invariato il target
+
 ### Corretto (sessione 2026-03-11 — ottimizzazioni)
 - **DNS — Sort mutation in render**: `zoneRecords.sort()` mutava l'array originale durante il rendering causando possibili inconsistenze React; sostituito con `[...zoneRecords].sort()`
 - **Scanner — crash su `openResult`**: se `api.getScan()` falliva, il modal veniva aperto con `selectedScan` nullo → TypeError; aggiunto try/catch con toast di errore

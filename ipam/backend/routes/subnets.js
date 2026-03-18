@@ -13,7 +13,7 @@ function isValidCIDR(cidr) {
   if (!m) return false;
   const octets = [m[1], m[2], m[3], m[4]].map(Number);
   const prefix = Number(m[5]);
-  return octets.every((n) => n >= 0 && n <= 255) && prefix >= 0 && prefix <= 32;
+  return octets.every((n) => n >= 0 && n <= 255) && prefix >= 1 && prefix <= 32;
 }
 
 function isValidIP(ip) {

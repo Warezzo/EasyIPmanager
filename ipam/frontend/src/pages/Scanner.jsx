@@ -38,26 +38,27 @@ export default function Scanner() {
     }).catch((e) => { showToast(e.message, "error"); setLoading(false); });
   }, []);
 
-  // Poll running scans
+  // Stop polling when no scans are running anymore
   useEffect(() => {
     const running = scans.some((s) => s.status === "running");
-    if (running) {
-      if (!pollRef.current) {
-        pollRef.current = setInterval(loadScans, 3000);
-      }
-    } else {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+    if (!running && pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
     }
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [scans, loadScans]);
+  }, [scans]);
+
+  // Start polling when a running scan is detected; clean up only on unmount or
+  // when loadScans identity changes. Keeping this separate from the scans effect
+  // prevents the interval from being destroyed and recreated on every poll result.
+  useEffect(() => {
+    const running = scans.some((s) => s.status === "running");
+    if (running && !pollRef.current) {
+      pollRef.current = setInterval(loadScans, 3000);
+    }
+    return () => { clearInterval(pollRef.current); pollRef.current = null; };
+  // loadScans is stable (useCallback with []) — intentionally not adding scans
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadScans]);
 
   const startScan = async () => {
     if (!form.target.trim()) { showToast("Inserisci un target", "error"); return; }
@@ -186,7 +187,11 @@ export default function Scanner() {
           </FormField>
 
           <FormField label="Subnet IPAM (opzionale)">
-            <select style={inputStyle} value={form.subnet_id} onChange={(e) => setForm({ ...form, subnet_id: e.target.value, target: e.target.value ? subnets.find(s => s.id === e.target.value)?.cidr || form.target : form.target })}>
+            <select style={inputStyle} value={form.subnet_id} onChange={(e) => {
+              const subnetId = e.target.value;
+              const cidr = subnetId ? subnets.find(s => s.id === subnetId)?.cidr : undefined;
+              setForm({ ...form, subnet_id: subnetId, ...(cidr ? { target: cidr } : {}) });
+            }}>
               <option value="">— Nessuna associazione —</option>
               {subnets.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.cidr})</option>)}
             </select>

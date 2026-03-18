@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { SSH_ENCRYPTION_KEY } = require("./config");
 
 const ALGORITHM = "aes-256-gcm";
 const KEY_LEN   = 32;
@@ -6,12 +7,13 @@ const IV_LEN    = 16;
 const TAG_LEN   = 16;
 const SALT      = "ipam-ssh-v1";
 
+// Derived once at first use — scryptSync is intentionally slow (~80-100 ms)
+// and the key never changes at runtime, so caching avoids the cost on every
+// encrypt/decrypt call.
+let _cachedKey = null;
 function getKey() {
-  const secret =
-    process.env.SSH_ENCRYPTION_KEY ||
-    process.env.JWT_SECRET         ||
-    "dev-insecure-default";
-  return crypto.scryptSync(secret, SALT, KEY_LEN);
+  if (!_cachedKey) _cachedKey = crypto.scryptSync(SSH_ENCRYPTION_KEY, SALT, KEY_LEN);
+  return _cachedKey;
 }
 
 /**

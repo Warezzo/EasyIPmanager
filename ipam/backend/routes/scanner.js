@@ -66,21 +66,26 @@ router.post("/start", scanStartLimiter, (req, res) => {
   const killTimer = setTimeout(() => {
     if (activeScans.has(id)) {
       proc.kill("SIGKILL");
+      // Safety: if close event never fires after SIGKILL, clean up the map anyway
+      setTimeout(() => activeScans.delete(id), 5_000);
     }
   }, 10 * 60 * 1000);
 
   activeScans.set(id, { process: proc, killTimer });
 
-  const MAX_BUF = 10 * 1024 * 1024; // 10 MB cap — prevents memory exhaustion on huge scans
-  let stdout = "";
-  let stderr = "";
+  // Collect chunks as Buffers — avoids O(n²) string concatenation on large output
+  const MAX_BUF = 10 * 1024 * 1024; // 10 MB cap — prevents memory exhaustion
+  const stdoutChunks = [];
+  const stderrChunks = [];
+  let totalOut = 0, totalErr = 0;
   let bufOverflow = false;
+
   proc.stdout.on("data", (d) => {
-    if (stdout.length < MAX_BUF) stdout += d.toString();
+    if (totalOut < MAX_BUF) { stdoutChunks.push(d); totalOut += d.length; }
     else bufOverflow = true;
   });
   proc.stderr.on("data", (d) => {
-    if (stderr.length < MAX_BUF) stderr += d.toString();
+    if (totalErr < MAX_BUF) { stderrChunks.push(d); totalErr += d.length; }
   });
 
   proc.on("error", (err) => {
@@ -98,7 +103,9 @@ router.post("/start", scanStartLimiter, (req, res) => {
       clearTimeout(entry.killTimer);
       activeScans.delete(id);
     }
-    const db2 = getDb();
+    // Materialize strings only once, after all chunks are received
+    const stdout = Buffer.concat(stdoutChunks).toString();
+    const stderr = Buffer.concat(stderrChunks).toString();
     try {
       const parsed = parseNmapOutput(stdout);
       // Keep at most 64 KB of raw output in the DB — enough for debugging,
@@ -109,10 +116,10 @@ router.post("/start", scanStartLimiter, (req, res) => {
         : stdout;
       const result = { hosts: parsed, raw: rawDb, stderr: stderr.slice(0, 4096) };
       if (bufOverflow) result.warning = "Output truncated at 10 MB — scan too large";
-      db2.prepare("UPDATE scan_results SET status=?,finished_at=?,result=? WHERE id=?")
+      db.prepare("UPDATE scan_results SET status=?,finished_at=?,result=? WHERE id=?")
         .run(code === 0 ? "done" : "error", new Date().toISOString(), JSON.stringify(result), id);
     } catch (e) {
-      db2.prepare("UPDATE scan_results SET status='error',finished_at=?,result=? WHERE id=?")
+      db.prepare("UPDATE scan_results SET status='error',finished_at=?,result=? WHERE id=?")
         .run(new Date().toISOString(), JSON.stringify({ error: e.message, raw: stdout, stderr }), id);
     }
   });

@@ -3,6 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { api } from "../lib/api.js";
 import { useTheme } from "../hooks/useTheme.jsx";
+import { useAuth } from "../hooks/useAuth.jsx";
 import { Icon } from "../components/UI.jsx";
 
 // ── xterm theme tokens ────────────────────────────────────────────────────────
@@ -30,6 +31,23 @@ const EMPTY_FORM = { name: "", host: "", port: "22", username: "", auth_type: "p
 export default function SSH() {
   const { resolved } = useTheme();
   const isDark = resolved !== "light";
+  const { user } = useAuth();
+
+  // Close all WebSocket sessions when the user logs out
+  useEffect(() => {
+    if (!user) {
+      Object.keys(wsRefs.current).forEach(id => {
+        try { wsRefs.current[id]?.close(); } catch {}
+        delete wsRefs.current[id];
+      });
+      Object.keys(termRefs.current).forEach(id => {
+        try { termRefs.current[id]?.term?.dispose(); } catch {}
+        delete termRefs.current[id];
+      });
+      setSessions([]);
+      setActiveTab(null);
+    }
+  }, [user]);
 
   const [hosts, setHosts]       = useState([]);
   const [sessions, setSessions] = useState([]);    // [{ id, label, status, hostId? }]
@@ -125,13 +143,21 @@ export default function SSH() {
   }, [isDark]);
 
   // ── SSH connect ─────────────────────────────────────────────────────────────
-  function connectSession(id, params) {
+  async function connectSession(id, params) {
     // params: { hostId } or { host, port, username, authType, secret }
     updateSessionStatus(id, "connecting");
 
-    const token = localStorage.getItem("ipam_token");
+    // Get a one-time ticket instead of sending JWT in the URL
+    let ticket;
+    try {
+      const res = await api.getWsTicket();
+      ticket = res.ticket;
+    } catch (e) {
+      updateSessionStatus(id, "error");
+      return;
+    }
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const wsUrl = `${proto}://${window.location.host}/ws/ssh?token=${encodeURIComponent(token)}`;
+    const wsUrl = `${proto}://${window.location.host}/ws/ssh?ticket=${encodeURIComponent(ticket)}`;
     const ws = new WebSocket(wsUrl);
     wsRefs.current[id] = ws;
 
@@ -490,10 +516,8 @@ export default function SSH() {
             </div>
           )}
           {hosts.map(h => (
-            <div key={h.id}
-              style={c.hostItem(false)}
-              onMouseEnter={e => { e.currentTarget.querySelector(".host-actions").style.opacity = 1; }}
-              onMouseLeave={e => { e.currentTarget.querySelector(".host-actions").style.opacity = 0; }}>
+            <div key={h.id} className="host-item"
+              style={c.hostItem(false)}>
               <div style={{ minWidth: 0, flex: 1, cursor: "pointer" }} onClick={() => {
                 const id = nextId();
                 setSessions(prev => [...prev, { id, label: `${h.username}@${h.host}`, status: "idle", hostId: h.id }]);
@@ -507,16 +531,14 @@ export default function SSH() {
                 </div>
               </div>
               <div className="host-actions" style={{ ...c.hostActions, opacity: 0 }}>
-                <button onClick={e => { e.stopPropagation(); openEditModal(h); }}
-                  style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 3, borderRadius: 4, display: "flex" }}
+                <button className="icon-btn" onClick={e => { e.stopPropagation(); openEditModal(h); }}
+                  style={{ padding: 3, display: "flex" }}
                   title="Modifica">
                   <Icon d={ICON_EDIT} size={12} />
                 </button>
-                <button onClick={e => { e.stopPropagation(); setConfirmDelete(h); }}
-                  style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 3, borderRadius: 4, display: "flex" }}
-                  title="Elimina"
-                  onMouseEnter={e => { e.currentTarget.style.color = "#ef4444"; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = "var(--text-ghost)"; }}>
+                <button className="icon-btn icon-btn-danger" onClick={e => { e.stopPropagation(); setConfirmDelete(h); }}
+                  style={{ padding: 3, display: "flex" }}
+                  title="Elimina">
                   <Icon d={ICON_TRASH} size={12} />
                 </button>
               </div>
@@ -533,18 +555,14 @@ export default function SSH() {
             <button key={s.id} style={c.tab(activeTab === s.id)} onClick={() => setActiveTab(s.id)}>
               <span style={c.statusDot(s.status)} />
               <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis" }}>{s.label}</span>
-              <span
-                style={{ marginLeft: 2, color: "var(--text-ghost)", display: "flex", alignItems: "center", borderRadius: 3, padding: "1px 2px" }}
-                onClick={e => { e.stopPropagation(); closeSession(s.id); }}
-                onMouseEnter={e => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.background = "rgba(239,68,68,0.1)"; }}
-                onMouseLeave={e => { e.currentTarget.style.color = "var(--text-ghost)"; e.currentTarget.style.background = "transparent"; }}>
+              <span className="close-tab-btn"
+                style={{ marginLeft: 2, display: "flex", alignItems: "center" }}
+                onClick={e => { e.stopPropagation(); closeSession(s.id); }}>
                 <Icon d={ICON_CLOSE} size={10} />
               </span>
             </button>
           ))}
-          <button style={c.tabNewBtn} title="Nuova sessione" onClick={openBlankSession}
-            onMouseEnter={e => { e.currentTarget.style.color = "var(--accent)"; }}
-            onMouseLeave={e => { e.currentTarget.style.color = "var(--text-ghost)"; }}>
+          <button className="tab-new-btn" style={c.tabNewBtn} title="Nuova sessione" onClick={openBlankSession}>
             +
           </button>
         </div>
@@ -568,12 +586,6 @@ export default function SSH() {
       {(modal === "add" || modal === "edit") && <HostModal />}
       {confirmDelete && <ConfirmDeleteModal host={confirmDelete} />}
 
-      {/* xterm CSS */}
-      <style>{`
-        @import url('https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css');
-        .xterm { height: 100%; }
-        .xterm-viewport { overflow-y: hidden !important; }
-      `}</style>
     </div>
   );
 }

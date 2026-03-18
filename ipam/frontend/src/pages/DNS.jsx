@@ -41,6 +41,7 @@ export default function DNS() {
   const save = async () => {
     const errs = {};
     if (!form.zone.trim()) errs.zone = "Obbligatorio";
+    else if (!/^[a-z0-9.-]+$/i.test(form.zone) || form.zone.startsWith(".") || form.zone.endsWith(".")) errs.zone = "Formato non valido (es. lab.local)";
     if (!form.name.trim()) errs.name = "Obbligatorio";
     if (!form.value.trim()) errs.value = "Obbligatorio";
     if (Object.keys(errs).length) { setErrors(errs); return; }
@@ -69,11 +70,14 @@ export default function DNS() {
     });
   };
 
-  const filtered = useMemo(() => records.filter((r) => {
-    if (selectedZone !== "all" && r.zone !== selectedZone) return false;
-    if (search) return r.name.includes(search) || r.value.includes(search) || r.zone.includes(search);
-    return true;
-  }), [records, selectedZone, search]);
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return records.filter((r) => {
+      if (selectedZone !== "all" && r.zone !== selectedZone) return false;
+      if (q) return r.name.toLowerCase().includes(q) || r.value.toLowerCase().includes(q) || r.zone.toLowerCase().includes(q);
+      return true;
+    });
+  }, [records, selectedZone, search]);
 
   const grouped = useMemo(() =>
     filtered.reduce((acc, r) => { (acc[r.zone] = acc[r.zone] || []).push(r); return acc; }, {}),
@@ -112,16 +116,15 @@ export default function DNS() {
                 <span>Type</span><span>Name</span><span>TTL</span><span>Value</span><span>Prio</span><span>Azioni</span>
               </div>
               {[...zoneRecords].sort((a, b) => a.name.localeCompare(b.name)).map((r) => (
-                <div key={r.id} style={{ display: "grid", gridTemplateColumns: "80px 1fr 80px 1fr 60px 80px", gap: 12, padding: "10px 16px", borderBottom: "1px solid var(--border-subtle)", alignItems: "center", transition: "background 0.1s" }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-raised)"} onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                <div key={r.id} className="row-hover" style={{ display: "grid", gridTemplateColumns: "80px 1fr 80px 1fr 60px 80px", gap: 12, padding: "10px 16px", borderBottom: "1px solid var(--border-subtle)", alignItems: "center", transition: "background 0.1s" }}>
                   <span><Badge color={TYPE_COLORS[r.type] || "#64748b"}>{r.type}</Badge></span>
                   <span style={{ fontFamily: "monospace", fontSize: 13, color: "var(--text-primary)" }}>{r.name}</span>
                   <span style={{ fontSize: 12, color: "var(--text-faint)" }}>{r.ttl}</span>
                   <span style={{ fontFamily: "monospace", fontSize: 12, color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.value}</span>
                   <span style={{ fontSize: 12, color: "var(--text-faint)" }}>{r.priority || "—"}</span>
                   <div style={{ display: "flex", gap: 4 }}>
-                    <button onClick={() => openEdit(r)} style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 4, borderRadius: 4 }} onMouseEnter={(e) => e.currentTarget.style.color = "var(--text-secondary)"} onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-ghost)"}><Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" size={14} /></button>
-                    <button onClick={() => del(r.id)} style={{ background: "none", border: "none", color: "var(--text-ghost)", cursor: "pointer", padding: 4, borderRadius: 4 }} onMouseEnter={(e) => e.currentTarget.style.color = "#ef4444"} onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-ghost)"}><Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={14} /></button>
+                    <button className="icon-btn" onClick={() => openEdit(r)} style={{ padding: 4 }}><Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" size={14} /></button>
+                    <button className="icon-btn icon-btn-danger" onClick={() => del(r.id)} style={{ padding: 4 }}><Icon d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" size={14} /></button>
                   </div>
                 </div>
               ))}

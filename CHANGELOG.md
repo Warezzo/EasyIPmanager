@@ -10,6 +10,47 @@ Il versionamento segue [Semantic Versioning](https://semver.org/lang/it/): `MAJO
 
 ## [Unreleased] — v1.2.0
 
+### Ottimizzazioni (sessione 2026-03-18)
+
+**Backend**
+- **[ALTO] crypto.js — cache chiave scrypt**: `scryptSync` calcolato una sola volta al primo utilizzo (~80-100 ms) invece di rieseguirlo ad ogni `encrypt()`/`decrypt()`
+- **[ALTO] scanner.js — Buffer chunks**: sostituita la concatenazione `string +=` (O(n²) GC pressure) con accumulo di `Buffer` chunks; `toString()` una volta sola nel `close` event
+- **[ALTO] dns.js — elimina N+1 in generate-ptr**: il loop con una `SELECT` per ogni IP è sostituito da una query + `Set` in memoria + transazione SQLite per gli insert
+- **[MEDIO] subnets.js + dns.js — elimina SELECT ridondanti post-INSERT/PUT**: oggetti di risposta costruiti dai dati già in memoria invece di ri-leggere dal DB
+- **[MEDIO] db.js — indice su `scan_results.created_at`**: copre `ORDER BY created_at DESC LIMIT 50` nella lista scan
+- **[BASSO] dns.js — `VALID_TYPES` come `Set`**: lookup O(1) invece di `Array.includes`
+
+**Frontend**
+- **[BUG] Scanner.jsx — fix polling interval**: l'`useEffect` con `[scans, loadScans]` distruggeva e ricreava l'intervallo ad ogni fetch (ogni 3 s); separato in due effect con dipendenze corrette
+- **[MEDIO] `src/index.css`**: stili globali spostati dal tag `<style>` runtime di `Layout.jsx`; CSS xterm importato dal pacchetto npm locale invece del CDN (`SSH.jsx`); entrambi caricati staticamente da `main.jsx`
+- **[MEDIO] CSS hover classes**: eliminati ~15 handler `onMouseEnter`/`onMouseLeave` con manipolazione DOM diretta (incluso un `querySelector` in `SSH.jsx`) in favore di classi CSS in `index.css`; interessa `IPAM.jsx`, `DNS.jsx`, `SSH.jsx`
+
+### Sicurezza (sessione 2026-03-18 — hardening completo)
+- **[CRITICO] Separazione chiavi crittografiche**: `SSH_ENCRYPTION_KEY` è ora **obbligatoriamente separata** da `JWT_SECRET`. Nuovo modulo `lib/config.js` centralizza la gestione dei secrets; in produzione entrambe le variabili sono richieste e devono essere diverse
+- **[CRITICO] Eliminazione fallback hardcoded**: `crypto.js` non fallback più a `JWT_SECRET` né a `"dev-insecure-default"`; `sshWs.js` non ha più il proprio `SECRET` duplicato. Un unico punto di verità in `lib/config.js`
+- **[ALTO] Protezione SSRF**: nuovo modulo `lib/validateHost.js` blocca `localhost`, `127.x.x.x`, `0.0.0.0`, `169.254.x.x` (AWS/GCP metadata), `::1`, `::` sia in `ssh.js` che in `sshWs.js`. Reti private (10.x, 172.16.x, 192.168.x) restano consentite (è un IPAM)
+- **[ALTO] WebSocket ticket monouso**: nuovo modulo `lib/wsTickets.js` + endpoint `POST /api/auth/ws-ticket`. Il JWT **non transita più nell'URL** del WebSocket (era esposto nei log di proxy/nginx). Il ticket è crittograficamente casuale (32 byte), monouso e scade in 30 secondi
+- **[MEDIO] JWT hardening**: algoritmo `HS256` esplicito in sign e verify (previene algorithm confusion), expiry ridotta da 12h a 4h
+- **[MEDIO] Bcrypt rounds**: aumentati da 10 a 12 (~4x più lento da bruteforce)
+- **[MEDIO] Security headers**: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, `HSTS` (solo in produzione)
+- **[MEDIO] Trust proxy**: `app.set("trust proxy", 1)` per rate-limit corretto dietro nginx/traefik; `sshWs.js` ora usa `X-Forwarded-For` / `X-Real-IP` per IP reale del client
+- **[BASSO] Validazione cols/rows SSH**: limitate a range 1–512 e 1–256 rispettivamente (previene DoS via valori assurdi)
+- **[BASSO] Errori SSH generici al client**: messaggi come "Permission denied (publickey)" non raggiungono più il browser; solo `"Connessione SSH fallita"` (log completo resta server-side)
+- **Env check produzione rafforzato**: `server.js` ora verifica che `SSH_ENCRYPTION_KEY` sia presente E diversa da `JWT_SECRET`
+
+### Corretto (sessione 2026-03-18 — analisi bug)
+- **SSH — Race condition connessione duplicata**: due messaggi `connect` in rapida successione potevano aprire due sessioni SSH parallele sulla stessa connessione WebSocket; aggiunto flag `isConnecting` con reset in `conn.on("error")` e `conn.on("close")`
+- **SSH — Errore decifrazione non loggato lato server**: il blocco catch del `decrypt` non produceva log; aggiunto `console.error` con host ID per debug operativo (secret mai esposto)
+- **SSH — WebSocket non chiuso al logout**: le sessioni SSH restavano aperte se l'utente effettuava il logout; aggiunto `useEffect` su `user` in `SSH.jsx` che chiude tutti i WebSocket e smonta i terminali xterm
+- **Scanner — Handle DB ridondante**: `proc.on("close")` creava un secondo handle `db2 = getDb()` inutile (singleton); sostituito con il `db` già in scope nel handler della route
+- **Scanner — killTimer non rimuove da `activeScans` se `close` non arriva**: dopo `SIGKILL`, se l'evento `close` del processo non si presenta (raro ma possibile), la voce rimaneva in mappa indefinitamente; aggiunto cleanup di sicurezza dopo 5s
+- **DNS — Ricerca record case-sensitive**: cercare "MAIL" non trovava "mail"; la ricerca ora converte sia query che campi in minuscolo prima del confronto
+- **DNS — Zona non validata nel form frontend**: il campo zona accettava qualsiasi stringa; aggiunta validazione regex `/^[a-z0-9.-]+$/i` con controllo su punto iniziale/finale
+- **DNS — Zona non validata in `generate-ptr` backend**: il parametro `zone` dal body non era controllato; aggiunto check regex prima dell'inserimento
+- **CIDR — Prefisso `/0` accettato**: `isValidCIDR` accettava `0.0.0.0/0`; limite inferiore cambiato da 0 a 1
+- **API — Nessun timeout sulle richieste fetch**: se il backend non risponde, il client restava appeso indefinitamente; aggiunto `AbortController` con timeout a 15 secondi su tutte le chiamate REST
+- **Scanner — Deselezionare subnet sovrascriveva il target manuale**: se l'utente selezionava una subnet (auto-fill CIDR) e poi deselezionava, il target rimaneva il CIDR precedente; ora la deselezione lascia invariato il target
+
 ### Corretto (sessione 2026-03-11 — ottimizzazioni)
 - **DNS — Sort mutation in render**: `zoneRecords.sort()` mutava l'array originale durante il rendering causando possibili inconsistenze React; sostituito con `[...zoneRecords].sort()`
 - **Scanner — crash su `openResult`**: se `api.getScan()` falliva, il modal veniva aperto con `selectedScan` nullo → TypeError; aggiunto try/catch con toast di errore

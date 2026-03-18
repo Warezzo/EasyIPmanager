@@ -33,17 +33,6 @@ export default function Layout({ children }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-base)", color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace", display: "flex" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
-        * { box-sizing: border-box; }
-        input:focus, select:focus, textarea:focus { border-color: var(--accent) !important; outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent); }
-        select option { background: var(--bg-overlay); color: var(--text-primary); }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: var(--bg-base); }
-        ::-webkit-scrollbar-thumb { background: var(--bg-overlay); border-radius: 3px; }
-        a { text-decoration: none; }
-      `}</style>
-
       {/* Sidebar */}
       <div style={{ width: 200, background: "var(--bg-surface)", borderRight: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", flexShrink: 0, position: "relative" }}>
 

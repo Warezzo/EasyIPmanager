@@ -13,7 +13,7 @@ function isValidCIDR(cidr) {
   if (!m) return false;
   const octets = [m[1], m[2], m[3], m[4]].map(Number);
   const prefix = Number(m[5]);
-  return octets.every((n) => n >= 0 && n <= 255) && prefix >= 0 && prefix <= 32;
+  return octets.every((n) => n >= 0 && n <= 255) && prefix >= 1 && prefix <= 32;
 }
 
 function isValidIP(ip) {
@@ -38,10 +38,12 @@ router.post("/", (req, res) => {
   if (!isValidCIDR(cidr)) return res.status(400).json({ error: "Invalid CIDR format (e.g. 192.168.1.0/24)" });
   const db = getDb();
   const id = randomUUID();
+  const created_at = new Date().toISOString();
+  const row = { id, name, cidr, vlan: vlan || null, location: location || null, description: description || null, created_at };
   try {
-    db.prepare(`INSERT INTO subnets (id,name,cidr,vlan,location,description) VALUES (?,?,?,?,?,?)`)
-      .run(id, name, cidr, vlan || null, location || null, description || null);
-    res.status(201).json(db.prepare("SELECT * FROM subnets WHERE id=?").get(id));
+    db.prepare(`INSERT INTO subnets (id,name,cidr,vlan,location,description,created_at) VALUES (?,?,?,?,?,?,?)`)
+      .run(id, name, cidr, row.vlan, row.location, row.description, created_at);
+    res.status(201).json(row);
   } catch (e) {
     if (e.code === "SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({ error: "CIDR already exists" });
     throw e;
@@ -54,11 +56,18 @@ router.put("/:id", (req, res) => {
   const db = getDb();
   const existing = db.prepare("SELECT * FROM subnets WHERE id=?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Not found" });
+  const updated = {
+    ...existing,
+    name:        name        ?? existing.name,
+    cidr:        cidr        ?? existing.cidr,
+    vlan:        vlan        ?? existing.vlan,
+    location:    location    ?? existing.location,
+    description: description ?? existing.description,
+  };
   try {
     db.prepare(`UPDATE subnets SET name=?,cidr=?,vlan=?,location=?,description=? WHERE id=?`)
-      .run(name ?? existing.name, cidr ?? existing.cidr, vlan ?? existing.vlan,
-        location ?? existing.location, description ?? existing.description, req.params.id);
-    res.json(db.prepare("SELECT * FROM subnets WHERE id=?").get(req.params.id));
+      .run(updated.name, updated.cidr, updated.vlan, updated.location, updated.description, req.params.id);
+    res.json(updated);
   } catch (e) {
     if (e.code === "SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({ error: "CIDR already exists" });
     throw e;
@@ -87,10 +96,12 @@ router.post("/:id/entries", (req, res) => {
   if (type && !VALID_ENTRY_TYPES.includes(type)) return res.status(400).json({ error: `Invalid type. Must be one of: ${VALID_ENTRY_TYPES.join(", ")}` });
   const db = getDb();
   const id = randomUUID();
+  const created_at = new Date().toISOString();
+  const finalTags = JSON.stringify(tags || []);
   try {
-    db.prepare(`INSERT INTO ip_entries (id,subnet_id,ip,hostname,mac,type,description,tags) VALUES (?,?,?,?,?,?,?,?)`)
-      .run(id, req.params.id, ip, hostname, mac || null, type || "other", description || null, JSON.stringify(tags || []));
-    res.status(201).json(parseEntry(db.prepare("SELECT * FROM ip_entries WHERE id=?").get(id)));
+    db.prepare(`INSERT INTO ip_entries (id,subnet_id,ip,hostname,mac,type,description,tags,created_at) VALUES (?,?,?,?,?,?,?,?,?)`)
+      .run(id, req.params.id, ip, hostname, mac || null, type || "other", description || null, finalTags, created_at);
+    res.status(201).json(parseEntry({ id, subnet_id: req.params.id, ip, hostname, mac: mac || null, type: type || "other", description: description || null, tags: finalTags, created_at }));
   } catch (e) {
     if (e.code === "SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({ error: "IP already assigned in this subnet" });
     throw e;
@@ -102,10 +113,18 @@ router.put("/:subnetId/entries/:id", (req, res) => {
   const db = getDb();
   const existing = db.prepare("SELECT * FROM ip_entries WHERE id=? AND subnet_id=?").get(req.params.id, req.params.subnetId);
   if (!existing) return res.status(404).json({ error: "Not found" });
+  const updatedTags = JSON.stringify(tags ?? JSON.parse(existing.tags));
+  const updated = {
+    ...existing,
+    hostname:    hostname    ?? existing.hostname,
+    mac:         mac         ?? existing.mac,
+    type:        type        ?? existing.type,
+    description: description ?? existing.description,
+    tags:        updatedTags,
+  };
   db.prepare(`UPDATE ip_entries SET hostname=?,mac=?,type=?,description=?,tags=? WHERE id=?`)
-    .run(hostname ?? existing.hostname, mac ?? existing.mac, type ?? existing.type,
-      description ?? existing.description, JSON.stringify(tags ?? JSON.parse(existing.tags)), req.params.id);
-  res.json(parseEntry(db.prepare("SELECT * FROM ip_entries WHERE id=?").get(req.params.id)));
+    .run(updated.hostname, updated.mac, updated.type, updated.description, updatedTags, req.params.id);
+  res.json(parseEntry(updated));
 });
 
 router.delete("/:subnetId/entries/:id", (req, res) => {

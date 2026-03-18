@@ -18,18 +18,18 @@ setup: ## First-time setup: copy .env.example, generate secrets, start app
 # ── Core lifecycle ───────────────────────────────────────────────────────────
 
 .PHONY: deploy
-deploy: ## Build image and start container (requires .env to exist)
+deploy: ## Pull image from GHCR and start container (requires .env to exist)
 	@$(call check_env)
-	$(COMPOSE) up --build -d
+	$(COMPOSE) pull
+	$(COMPOSE) up -d
 	@echo "✔  EasyIPmanager running at http://localhost:$${PORT:-5050}"
 
 .PHONY: update
-update: ## Pull latest code, rebuild image, restart container
+update: ## Pull latest image from GHCR and restart container
 	@$(call check_env)
-	git pull
-	$(COMPOSE) up --build -d
-	$(COMPOSE) images
-	@docker image prune -f --filter "label=com.docker.compose.project=$(CONTAINER)" 2>/dev/null || true
+	$(COMPOSE) pull
+	$(COMPOSE) up -d
+	@docker image prune -f 2>/dev/null || true
 	@echo "✔  Update complete — http://localhost:$${PORT:-5050}"
 
 .PHONY: restart

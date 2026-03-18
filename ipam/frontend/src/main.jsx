@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import IPAM from "./pages/IPAM";
 import DNS from "./pages/DNS";
 import Scanner from "./pages/Scanner";
+import SSH from "./pages/SSH";
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -33,6 +34,7 @@ function App() {
                     <Route path="/" element={<IPAM />} />
                     <Route path="/dns" element={<DNS />} />
                     <Route path="/scanner" element={<Scanner />} />
+                    <Route path="/ssh" element={<SSH />} />
                   </Routes>
                 </Layout>
               </PrivateRoute>

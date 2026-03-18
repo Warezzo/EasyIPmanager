@@ -8,6 +8,7 @@ const NAV = [
   { to: "/",        label: "IPAM",    icon: "M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 0 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 0-2-2V9m0 0h18" },
   { to: "/dns",     label: "DNS",     icon: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0zM9 9h.01M15 9h.01M8 13s1.5 2 4 2 4-2 4-2" },
   { to: "/scanner", label: "Scanner", icon: "M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 1 1 0 10h-2M8 12h8" },
+  { to: "/ssh",     label: "SSH",     icon: "M8 9l3 3-3 3M13 15h3M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" },
 ];
 
 const THEME_OPTIONS = [

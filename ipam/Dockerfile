@@ -22,6 +22,6 @@ COPY backend/ ./backend/
 # Create data directory for SQLite
 RUN mkdir -p /data
 
-EXPOSE 3000
+EXPOSE ${PORT:-5050}
 
 CMD ["node", "backend/server.js"]

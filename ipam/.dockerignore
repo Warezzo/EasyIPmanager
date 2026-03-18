@@ -1,0 +1,31 @@
+# Dependencies (rebuilt inside Docker)
+node_modules/
+**/node_modules/
+
+# Frontend build output (rebuilt inside Docker)
+frontend/dist/
+
+# Git
+.git/
+.gitignore
+
+# Environment — never bake secrets into image
+.env
+
+# SQLite database and WAL files
+*.db
+*.db-shm
+*.db-wal
+data/
+ipam_data/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Development configs
+*.local
